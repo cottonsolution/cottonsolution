@@ -20,6 +20,7 @@ import {
   LogoutIcon,
   ImageIcon,
   EyeIcon,
+  VideoIcon,
   MailIcon,
   PhoneIcon,
   MapPinIcon,

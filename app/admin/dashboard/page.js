@@ -20,6 +20,14 @@ import {
   LogoutIcon,
   ImageIcon,
   EyeIcon,
+  MailIcon,
+  PhoneIcon,
+  MapPinIcon,
+  WhatsAppIcon,
+  FacebookIcon,
+  InstagramIcon,
+  YoutubeIcon,
+  XIcon,
 } from "@/components/Icons";
 
 // Each tab gets its own gradient (via CSS vars) so the sidebar icon tiles
@@ -30,6 +38,7 @@ const TABS = [
   { label: "Our Services", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
   { label: "How It Works", icon: RouteIcon, from: "#fb923c", to: "#c2410c" },
   { label: "Vehicle Types", icon: TruckIcon, from: "#4ade80", to: "#15803d" },
+  { label: "Contact", icon: MailIcon, from: "#f472b6", to: "#be185d" },
   { label: "Expiry Alerts", icon: BellIcon, from: "#f87171", to: "#b91c1c" },
 ];
 
@@ -153,6 +162,7 @@ export default function AdminDashboardPage() {
           {activeTab === "Our Services" && <ServicesManager />}
           {activeTab === "How It Works" && <StepsManager />}
           {activeTab === "Vehicle Types" && <VehicleTypesManager />}
+          {activeTab === "Contact" && <ContactManager />}
           {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
         </div>
       </div>
@@ -772,6 +782,172 @@ function VehicleTypeRow({ type, isEditing, onEdit, onCancel, onSave, onDelete })
         </button>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TAB 5: CONTACT INFO  (address, phone, WhatsApp, email + social links —
+// feeds the Contact page and the site-wide footer)
+// ---------------------------------------------------------------------------
+const SOCIAL_FIELDS = [
+  { key: "facebook_url", label: "Facebook", icon: FacebookIcon, placeholder: "https://facebook.com/yourpage" },
+  { key: "instagram_url", label: "Instagram", icon: InstagramIcon, placeholder: "https://instagram.com/yourpage" },
+  { key: "youtube_url", label: "YouTube", icon: YoutubeIcon, placeholder: "https://youtube.com/@yourchannel" },
+  { key: "x_url", label: "X (Twitter)", icon: XIcon, placeholder: "https://x.com/yourhandle" },
+];
+
+function ContactManager() {
+  const [form, setForm] = useState({
+    address: "",
+    phone: "",
+    whatsapp_number: "",
+    email: "",
+    facebook_url: "",
+    instagram_url: "",
+    youtube_url: "",
+    x_url: "",
+  });
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    const { data, error: fetchError } = await supabase.from("contact_info").select("*").eq("id", 1).single();
+    if (fetchError) setError(fetchError.message);
+    if (data) {
+      setForm({
+        address: data.address ?? "",
+        phone: data.phone ?? "",
+        whatsapp_number: data.whatsapp_number ?? "",
+        email: data.email ?? "",
+        facebook_url: data.facebook_url ?? "",
+        instagram_url: data.instagram_url ?? "",
+        youtube_url: data.youtube_url ?? "",
+        x_url: data.x_url ?? "",
+      });
+    }
+    setLoading(false);
+  }
+  useEffect(() => { refresh(); }, []);
+
+  function update(key, value) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setSaved(false);
+    setError("");
+    const { error: saveError } = await supabase
+      .from("contact_info")
+      .update({
+        address: form.address.trim(),
+        phone: form.phone.trim(),
+        whatsapp_number: form.whatsapp_number.trim(),
+        email: form.email.trim(),
+        facebook_url: form.facebook_url.trim() || null,
+        instagram_url: form.instagram_url.trim() || null,
+        youtube_url: form.youtube_url.trim() || null,
+        x_url: form.x_url.trim() || null,
+      })
+      .eq("id", 1);
+    if (saveError) return setError(saveError.message);
+    setSaved(true);
+  }
+
+  if (loading) return <p className="text-slate-400 text-sm">Loading contact details…</p>;
+
+  return (
+    <form onSubmit={handleSave} className="space-y-8">
+      <div className="card max-w-xl space-y-5">
+        <div>
+          <h3 className="font-semibold text-brand-navy">Contact Details</h3>
+          <p className="text-sm text-slate-500">
+            Shown on the Contact page and in the footer on every page of the site.
+          </p>
+        </div>
+
+        <div>
+          <label className="field-label flex items-center gap-2">
+            <MapPinIcon className="w-4 h-4 text-brand-orange" /> Address
+          </label>
+          <input
+            value={form.address}
+            onChange={(e) => update("address", e.target.value)}
+            placeholder="Multan, Punjab, Pakistan"
+            className="field-input"
+          />
+        </div>
+
+        <div>
+          <label className="field-label flex items-center gap-2">
+            <PhoneIcon className="w-4 h-4 text-brand-orange" /> Phone
+          </label>
+          <input
+            value={form.phone}
+            onChange={(e) => update("phone", e.target.value)}
+            placeholder="+92 300 0000000"
+            className="field-input"
+          />
+        </div>
+
+        <div>
+          <label className="field-label flex items-center gap-2">
+            <WhatsAppIcon className="w-4 h-4 text-green-500" /> WhatsApp Number
+          </label>
+          <input
+            value={form.whatsapp_number}
+            onChange={(e) => update("whatsapp_number", e.target.value)}
+            placeholder="+92 300 0000000"
+            className="field-input"
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            Used to build the "Chat on WhatsApp" link automatically — enter with country code, no spaces work best (e.g. 923000000000).
+          </p>
+        </div>
+
+        <div>
+          <label className="field-label flex items-center gap-2">
+            <MailIcon className="w-4 h-4 text-brand-orange" /> Email
+          </label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => update("email", e.target.value)}
+            placeholder="support@smartgoodstransport.pk"
+            className="field-input"
+          />
+        </div>
+      </div>
+
+      <div className="card max-w-xl space-y-5">
+        <div>
+          <h3 className="font-semibold text-brand-navy">Social Media Links</h3>
+          <p className="text-sm text-slate-500">
+            Leave a field empty to hide that icon on the site. Full links only (starting with https://).
+          </p>
+        </div>
+        {SOCIAL_FIELDS.map((s) => (
+          <div key={s.key}>
+            <label className="field-label flex items-center gap-2">
+              <s.icon className="w-4 h-4 text-brand-orange" /> {s.label}
+            </label>
+            <input
+              value={form[s.key]}
+              onChange={(e) => update(s.key, e.target.value)}
+              placeholder={s.placeholder}
+              className="field-input"
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="max-w-xl">
+        <button type="submit" className="btn-orange">Save Changes</button>
+        {saved && <p className="text-green-700 text-sm mt-2">Contact details updated.</p>}
+        {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
+      </div>
+    </form>
   );
 }
 

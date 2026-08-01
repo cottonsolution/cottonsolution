@@ -8,6 +8,12 @@ export const metadata = {
     "Pakistan's smartest commercial goods transport network — connecting verified truck drivers with commodity loads.",
 };
 
+// Footer fetches admin-managed contact info/social links on every page.
+// Forcing dynamic rendering here (once, at the root) guarantees that data
+// is always fresh across every route, not just the homepage/contact page.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

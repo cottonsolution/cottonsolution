@@ -72,6 +72,26 @@ create table if not exists public.hero_slides (
 );
 
 -- ----------------------------------------------------------------------------
+-- 2c. CONTACT INFO  (address / phone / whatsapp / email / social links —
+--     shown on the Contact page and site-wide footer, editable from
+--     Admin Dashboard > Contact)
+-- ----------------------------------------------------------------------------
+create table if not exists public.contact_info (
+  id               int primary key default 1,
+  address          text not null default 'Multan, Punjab, Pakistan',
+  phone            text not null default '+92 300 0000000',
+  whatsapp_number  text not null default '+92 300 0000000',
+  email            text not null default 'support@smartgoodstransport.pk',
+  facebook_url     text,
+  instagram_url    text,
+  youtube_url      text,
+  x_url            text,
+  updated_at       timestamptz default now(),
+  constraint single_row_contact check (id = 1)
+);
+insert into public.contact_info (id) values (1) on conflict (id) do nothing;
+
+-- ----------------------------------------------------------------------------
 -- 3. SERVICES  ("Our Services" CMS — full CRUD from Admin Dashboard)
 -- ----------------------------------------------------------------------------
 create table if not exists public.services (
@@ -228,6 +248,7 @@ create trigger on_load_assigned
 -- ============================================================================
 alter table public.profiles enable row level security;
 alter table public.site_content enable row level security;
+alter table public.contact_info enable row level security;
 alter table public.hero_slides enable row level security;
 alter table public.services enable row level security;
 alter table public.how_it_works_steps enable row level security;
@@ -256,6 +277,11 @@ create policy "profiles_update_own" on public.profiles
 create policy "site_content_public_read" on public.site_content
   for select using (true);
 create policy "site_content_admin_write" on public.site_content
+  for update using (public.is_admin());
+
+create policy "contact_info_public_read" on public.contact_info
+  for select using (true);
+create policy "contact_info_admin_write" on public.contact_info
   for update using (public.is_admin());
 
 create policy "hero_slides_public_read" on public.hero_slides

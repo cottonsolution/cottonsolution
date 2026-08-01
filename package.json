@@ -1,5 +1,5 @@
 {
-  "name": "cotton-solution",
+  "name": "smart-goods-transport-company",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -9,20 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.8",
-    "lucide-react": "^0.344.0",
-    "next": "14.1.0",
-    "react": "^18",
-    "react-dom": "^18",
-    "resend": "^3.2.0"
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "next": "14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "autoprefixer": "^10.0.1",
-    "postcss": "^8",
-    "tailwindcss": "^3.3.0",
-    "typescript": "^5"
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.7"
   }
 }

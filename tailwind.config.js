@@ -1,22 +1,27 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,jsx}",
+    "./components/**/*.{js,jsx}",
   ],
   theme: {
     extend: {
       colors: {
-        cottonGreen: '#10b981',
-        cottonDark: '#111827',
-        cottonCard: '#ffffff',
-        airbnbRed: '#FF385C',
+        brand: {
+          navy: "#0f172a",   // deep corporate green-navy (primary dark)
+          green: "#14532d",  // supporting deep green accent
+          orange: "#f97316", // CTA / accent
+          orangeDark: "#c2410c",
+          slate: "#f8fafc",  // light background
+        },
+      },
+      fontFamily: {
+        display: ["Poppins", "sans-serif"],
+        body: ["Inter", "sans-serif"],
       },
       boxShadow: {
-        'airbnb': '0 6px 20px rgba(0,0,0,0.1)',
-        '3d': '0 10px 25px -5px rgba(16, 185, 129, 0.3), 0 8px 10px -6px rgba(16, 185, 129, 0.2)',
-      }
+        card: "0 4px 20px rgba(15, 23, 42, 0.08)",
+      },
     },
   },
   plugins: [],

@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -16,26 +16,55 @@ h1, h2, h3, h4 {
   @apply font-display;
 }
 
+/* Pill CTA buttons, icon + label — big tap targets for mobile use in the field */
 .btn-orange {
-  @apply bg-brand-orange hover:bg-brand-orangeDark text-white font-semibold px-5 py-2.5 rounded-lg transition-colors duration-150;
+  @apply inline-flex items-center justify-center gap-2 bg-brand-orange hover:bg-brand-orangeDark
+    text-white font-semibold px-5 py-3 rounded-full transition-colors duration-150 shadow-sm;
 }
 
 .btn-outline {
-  @apply border border-white/30 text-white hover:bg-white/10 font-medium px-5 py-2.5 rounded-lg transition-colors duration-150;
+  @apply inline-flex items-center justify-center gap-2 border-2 border-brand-navy/15 bg-white
+    text-brand-navy hover:border-brand-orange hover:text-brand-orange font-semibold px-5 py-3
+    rounded-full transition-colors duration-150;
+}
+
+.btn-outline-light {
+  @apply inline-flex items-center justify-center gap-2 border-2 border-white/40 text-white
+    hover:bg-white/10 font-semibold px-5 py-3 rounded-full transition-colors duration-150;
 }
 
 .card {
-  @apply bg-white rounded-xl shadow-card p-6;
+  @apply bg-white rounded-2xl shadow-card p-6;
+}
+
+.icon-badge {
+  @apply w-14 h-14 rounded-2xl flex items-center justify-center shrink-0;
+}
+
+.icon-badge-round {
+  @apply w-20 h-20 rounded-full flex items-center justify-center shrink-0;
 }
 
 .badge-valid {
-  @apply bg-green-100 text-green-800 px-2.5 py-1 rounded-full text-xs font-semibold;
+  @apply inline-flex items-center gap-1 bg-green-100 text-green-800 px-2.5 py-1 rounded-full text-xs font-semibold;
 }
 .badge-expiring {
-  @apply bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full text-xs font-semibold;
+  @apply inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full text-xs font-semibold;
 }
 .badge-expired {
-  @apply bg-red-100 text-red-800 px-2.5 py-1 rounded-full text-xs font-semibold;
+  @apply inline-flex items-center gap-1 bg-red-100 text-red-800 px-2.5 py-1 rounded-full text-xs font-semibold;
+}
+
+.field-label {
+  @apply flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-1;
+}
+
+.field-input {
+  @apply w-full border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent;
+}
+
+.section-eyebrow {
+  @apply inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand-orange bg-brand-orangeSoft px-3 py-1 rounded-full mb-4;
 }
 
 /* Respect reduced motion preference */

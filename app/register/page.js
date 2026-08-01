@@ -4,6 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
+import {
+  TruckIcon,
+  PhoneIcon,
+  UserIcon,
+  IdCardIcon,
+  LicenseIcon,
+  PermitIcon,
+  CalendarIcon,
+} from "@/components/Icons";
 
 const EMPTY_FORM = {
   vehicleNo: "",
@@ -58,8 +67,11 @@ export default function RegisterPage() {
   if (!user) {
     return (
       <section className="max-w-xl mx-auto px-4 py-16 text-center">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange mx-auto mb-4">
+          <TruckIcon className="w-7 h-7" />
+        </span>
         <p className="text-slate-600 mb-4">Please log in as a driver before registering a vehicle.</p>
-        <button className="btn-orange" onClick={() => router.push("/login")}>
+        <button className="btn-orange mx-auto" onClick={() => router.push("/login")}>
           Go to Login
         </button>
       </section>
@@ -68,6 +80,9 @@ export default function RegisterPage() {
 
   return (
     <section className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <span className="section-eyebrow">
+        <TruckIcon className="w-3.5 h-3.5" /> For Drivers
+      </span>
       <h1 className="text-3xl font-bold text-brand-navy mb-2">Driver &amp; Vehicle Registration</h1>
       <p className="text-slate-500 mb-8">
         Complete all fields, including document expiry dates, so your vehicle appears correctly in
@@ -75,7 +90,8 @@ export default function RegisterPage() {
       </p>
 
       {success && (
-        <p className="mb-6 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm">
+        <p className="mb-6 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+          <TruckIcon className="w-4 h-4 shrink-0" />
           Registration submitted successfully. Your vehicle is now searchable in Vehicle Verification.
         </p>
       )}
@@ -83,14 +99,15 @@ export default function RegisterPage() {
 
       <form onSubmit={handleSubmit} className="card space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label="Vehicle No" value={form.vehicleNo} onChange={(v) => update("vehicleNo", v)} required />
-          <Field label="Mobile No" value={form.mobileNo} onChange={(v) => update("mobileNo", v)} required />
-          <Field label="Driver Name" value={form.driverName} onChange={(v) => update("driverName", v)} required />
+          <Field icon={TruckIcon} label="Vehicle No" value={form.vehicleNo} onChange={(v) => update("vehicleNo", v)} required />
+          <Field icon={PhoneIcon} label="Mobile No" value={form.mobileNo} onChange={(v) => update("mobileNo", v)} required />
+          <Field icon={UserIcon} label="Driver Name" value={form.driverName} onChange={(v) => update("driverName", v)} required />
         </div>
 
         <div className="border-t border-slate-100 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label="Driver CNIC No" value={form.cnicNo} onChange={(v) => update("cnicNo", v)} required />
+          <Field icon={IdCardIcon} label="Driver CNIC No" value={form.cnicNo} onChange={(v) => update("cnicNo", v)} required />
           <Field
+            icon={CalendarIcon}
             label="CNIC Expiry Date"
             type="date"
             value={form.cnicExpiry}
@@ -98,8 +115,9 @@ export default function RegisterPage() {
             required
           />
 
-          <Field label="Driving Licence No" value={form.licenseNo} onChange={(v) => update("licenseNo", v)} required />
+          <Field icon={LicenseIcon} label="Driving Licence No" value={form.licenseNo} onChange={(v) => update("licenseNo", v)} required />
           <Field
+            icon={CalendarIcon}
             label="Licence Expiry Date"
             type="date"
             value={form.licenseExpiry}
@@ -107,8 +125,9 @@ export default function RegisterPage() {
             required
           />
 
-          <Field label="Route Permit No" value={form.permitNo} onChange={(v) => update("permitNo", v)} required />
+          <Field icon={PermitIcon} label="Route Permit No" value={form.permitNo} onChange={(v) => update("permitNo", v)} required />
           <Field
+            icon={CalendarIcon}
             label="Route Permit Expiry Date"
             type="date"
             value={form.permitExpiry}
@@ -118,6 +137,7 @@ export default function RegisterPage() {
         </div>
 
         <button type="submit" className="btn-orange w-full" disabled={submitting}>
+          <TruckIcon className="w-4 h-4" />
           {submitting ? "Submitting..." : "Submit Registration"}
         </button>
       </form>
@@ -125,16 +145,18 @@ export default function RegisterPage() {
   );
 }
 
-function Field({ label, value, onChange, type = "text", required }) {
+function Field({ icon: Icon, label, value, onChange, type = "text", required }) {
   return (
     <div>
-      <label className="text-sm font-medium text-slate-700">{label}</label>
+      <label className="field-label">
+        {Icon && <Icon className="w-4 h-4 text-brand-orange" />} {label}
+      </label>
       <input
         type={type}
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+        className="field-input"
       />
     </div>
   );

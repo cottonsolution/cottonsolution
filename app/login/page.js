@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { LoginIcon, UserIcon, PhoneIcon, MailIcon, LockIcon, TruckIcon, WalletIcon } from "@/components/Icons";
 
 const ROLE_REDIRECT = {
   admin: "/admin/dashboard",
@@ -71,10 +72,17 @@ export default function LoginPage() {
 
   return (
     <section className="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <div className="text-center mb-6">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange mx-auto mb-3">
+          <LoginIcon className="w-7 h-7" />
+        </span>
+        <h1 className="text-2xl font-bold text-brand-navy">Welcome</h1>
+      </div>
+
       <div className="card">
-        <div className="flex mb-6 rounded-lg bg-slate-100 p-1">
+        <div className="flex mb-6 rounded-full bg-slate-100 p-1">
           <button
-            className={`flex-1 py-2 rounded-md text-sm font-semibold ${
+            className={`flex-1 py-2.5 rounded-full text-sm font-semibold transition-colors ${
               mode === "login" ? "bg-white shadow text-brand-navy" : "text-slate-500"
             }`}
             onClick={() => setMode("login")}
@@ -82,7 +90,7 @@ export default function LoginPage() {
             Login
           </button>
           <button
-            className={`flex-1 py-2 rounded-md text-sm font-semibold ${
+            className={`flex-1 py-2.5 rounded-full text-sm font-semibold transition-colors ${
               mode === "signup" ? "bg-white shadow text-brand-navy" : "text-slate-500"
             }`}
             onClick={() => setMode("signup")}
@@ -94,70 +102,101 @@ export default function LoginPage() {
         {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
         {info && <p className="text-green-700 text-sm mb-4">{info}</p>}
 
-        <form onSubmit={mode === "login" ? handleLogin : handleSignup} className="space-y-4">
+        <form onSubmit={mode === "login" ? handleLogin : handleSignup} className="space-y-5">
           {mode === "signup" && (
             <>
               <div>
-                <label className="text-sm font-medium text-slate-700">Full Name</label>
+                <label className="field-label">
+                  <UserIcon className="w-4 h-4 text-brand-orange" /> Full Name
+                </label>
                 <input
                   required
                   value={form.fullName}
                   onChange={(e) => update("fullName", e.target.value)}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="field-input"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700">Mobile No</label>
+                <label className="field-label">
+                  <PhoneIcon className="w-4 h-4 text-brand-orange" /> Mobile No
+                </label>
                 <input
                   required
                   value={form.phone}
                   onChange={(e) => update("phone", e.target.value)}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="field-input"
                 />
               </div>
+
+              {/* Big tappable icon cards instead of a text dropdown — easier
+                  to recognise at a glance for merchants and drivers alike. */}
               <div>
-                <label className="text-sm font-medium text-slate-700">I am a</label>
-                <select
-                  value={form.role}
-                  onChange={(e) => update("role", e.target.value)}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                >
-                  <option value="merchant">Merchant / Trader</option>
-                  <option value="driver">Truck Driver</option>
-                </select>
+                <p className="field-label">I am a</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => update("role", "merchant")}
+                    className={`flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-colors ${
+                      form.role === "merchant"
+                        ? "border-brand-orange bg-brand-orangeSoft text-brand-navy"
+                        : "border-slate-200 text-slate-500"
+                    }`}
+                  >
+                    <WalletIcon className="w-7 h-7" />
+                    <span className="text-sm font-semibold">Merchant / Trader</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update("role", "driver")}
+                    className={`flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-colors ${
+                      form.role === "driver"
+                        ? "border-brand-orange bg-brand-orangeSoft text-brand-navy"
+                        : "border-slate-200 text-slate-500"
+                    }`}
+                  >
+                    <TruckIcon className="w-7 h-7" />
+                    <span className="text-sm font-semibold">Truck Driver</span>
+                  </button>
+                </div>
               </div>
             </>
           )}
 
           <div>
-            <label className="text-sm font-medium text-slate-700">Email</label>
+            <label className="field-label">
+              <MailIcon className="w-4 h-4 text-brand-orange" /> Email
+            </label>
             <input
               required
               type="email"
               value={form.email}
               onChange={(e) => update("email", e.target.value)}
-              className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+              className="field-input"
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Password</label>
+            <label className="field-label">
+              <LockIcon className="w-4 h-4 text-brand-orange" /> Password
+            </label>
             <input
               required
               type="password"
               minLength={6}
               value={form.password}
               onChange={(e) => update("password", e.target.value)}
-              className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+              className="field-input"
             />
           </div>
 
           <button type="submit" className="btn-orange w-full" disabled={loading}>
+            <LoginIcon className="w-4 h-4" />
             {loading ? "Please wait..." : mode === "login" ? "Log In" : "Create Account"}
           </button>
         </form>
 
         {mode === "signup" && (
-          <p className="text-xs text-slate-400 mt-4">
+          <p className="text-xs text-slate-400 mt-4 flex items-start gap-1.5">
+            <TruckIcon className="w-4 h-4 shrink-0 mt-0.5" />
             Registering a truck? After signup, drivers complete vehicle &amp; document details on the{" "}
             <a href="/register" className="text-brand-orange font-medium">
               Registration page

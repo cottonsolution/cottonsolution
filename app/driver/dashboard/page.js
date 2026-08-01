@@ -4,13 +4,25 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
+import {
+  TruckIcon,
+  GridIcon,
+  RouteIcon,
+  ChartIcon,
+  ShieldCheckIcon,
+  WalletIcon,
+  TruckCheckIcon,
+} from "@/components/Icons";
 
-const TABS = ["Available Loads", "My Trips"];
+const TABS = [
+  { label: "Available Loads", icon: GridIcon },
+  { label: "My Trips", icon: RouteIcon },
+];
 
 export default function DriverDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
-  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [activeTab, setActiveTab] = useState(TABS[0].label);
   const [myVehicle, setMyVehicle] = useState(null);
 
   useEffect(() => {
@@ -34,10 +46,16 @@ export default function DriverDashboardPage() {
 
   return (
     <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-bold text-brand-navy mb-1">Driver Dashboard</h1>
+      <div className="flex items-center gap-3 mb-1">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+          <TruckIcon className="w-6 h-6" />
+        </span>
+        <h1 className="text-3xl font-bold text-brand-navy">Driver Dashboard</h1>
+      </div>
       <p className="text-slate-500 mb-2">View open load offers, place bids, and manage your trips.</p>
       {!myVehicle && (
-        <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6">
+        <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
+          <ShieldCheckIcon className="w-4 h-4 shrink-0" />
           You haven&apos;t registered a vehicle yet.{" "}
           <a href="/register" className="font-semibold underline">Register now</a> to start bidding on loads.
         </p>
@@ -46,15 +64,16 @@ export default function DriverDashboardPage() {
       <div className="flex gap-2 mb-8 border-b border-slate-200 overflow-x-auto">
         {TABS.map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              activeTab === tab
+            key={tab.label}
+            onClick={() => setActiveTab(tab.label)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              activeTab === tab.label
                 ? "border-brand-orange text-brand-navy"
                 : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
-            {tab}
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
           </button>
         ))}
       </div>
@@ -99,14 +118,33 @@ function AvailableLoads({ driverId, vehicle }) {
 
   return (
     <div className="space-y-3">
-      {message && <p className="text-sm text-brand-navy bg-slate-100 rounded-lg px-4 py-2">{message}</p>}
-      {loads.length === 0 && <p className="text-slate-400 text-sm">No open loads right now — check back soon.</p>}
+      {message && (
+        <p className="text-sm text-brand-navy bg-slate-100 rounded-lg px-4 py-2 flex items-center gap-2">
+          <TruckCheckIcon className="w-4 h-4 shrink-0" /> {message}
+        </p>
+      )}
+      {loads.length === 0 && (
+        <p className="text-slate-400 text-sm flex items-center gap-2">
+          <GridIcon className="w-4 h-4" /> No open loads right now — check back soon.
+        </p>
+      )}
       {loads.map((l) => (
         <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_munds} munds</p>
-            <p className="text-sm text-slate-500">{l.pickup_location} &rarr; {l.dropoff_location}</p>
-            {l.offered_rate && <p className="text-sm text-slate-500">Offered rate: PKR {l.offered_rate}</p>}
+          <div className="flex items-center gap-3">
+            <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+              <TruckIcon className="w-5 h-5" />
+            </span>
+            <div>
+              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_munds} munds</p>
+              <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
+              </p>
+              {l.offered_rate && (
+                <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                  <WalletIcon className="w-3.5 h-3.5" /> Offered rate: PKR {l.offered_rate}
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -116,11 +154,11 @@ function AvailableLoads({ driverId, vehicle }) {
               value={bidAmounts[l.id] || ""}
               onChange={(e) => setBidAmounts((b) => ({ ...b, [l.id]: e.target.value }))}
             />
-            <button onClick={() => placeBid(l, false)} className="px-4 py-2 text-sm border border-slate-300 rounded-lg">
+            <button onClick={() => placeBid(l, false)} className="px-4 py-2 text-sm border border-slate-300 rounded-lg font-medium text-slate-600">
               Counter-Bid
             </button>
             <button onClick={() => placeBid(l, true)} className="btn-orange px-4 py-2 text-sm">
-              Accept
+              <ShieldCheckIcon className="w-4 h-4" /> Accept
             </button>
           </div>
         </div>
@@ -151,17 +189,29 @@ function MyTrips({ vehicle }) {
 
   return (
     <div className="space-y-3">
-      {(!vehicle || loads.length === 0) && <p className="text-slate-400 text-sm">No active trips yet.</p>}
+      {(!vehicle || loads.length === 0) && (
+        <p className="text-slate-400 text-sm flex items-center gap-2">
+          <RouteIcon className="w-4 h-4" /> No active trips yet.
+        </p>
+      )}
       {loads.map((l) => (
         <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_munds} munds</p>
-            <p className="text-sm text-slate-500">{l.pickup_location} &rarr; {l.dropoff_location}</p>
+          <div className="flex items-center gap-3">
+            <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+              <TruckIcon className="w-5 h-5" />
+            </span>
+            <div>
+              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_munds} munds</p>
+              <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
             {l.status !== "delivered" && (
               <button onClick={() => advanceStatus(l)} className="btn-orange px-4 py-2 text-sm">
+                <TruckCheckIcon className="w-4 h-4" />
                 {l.status === "assigned" ? "Start Trip" : "Mark Delivered"}
               </button>
             )}

@@ -4,13 +4,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
+import { HomeIcon, GridIcon, RouteIcon, BellIcon, ShieldCheckIcon } from "@/components/Icons";
 
-const TABS = ["Home Content", "Our Services", "How It Works", "Expiry Alerts"];
+const TABS = [
+  { label: "Home Content", icon: HomeIcon },
+  { label: "Our Services", icon: GridIcon },
+  { label: "How It Works", icon: RouteIcon },
+  { label: "Expiry Alerts", icon: BellIcon },
+];
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
-  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [activeTab, setActiveTab] = useState(TABS[0].label);
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "admin")) {
@@ -22,21 +28,27 @@ export default function AdminDashboardPage() {
 
   return (
     <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-bold text-brand-navy mb-1">Admin Dashboard</h1>
+      <div className="flex items-center gap-3 mb-1">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+          <ShieldCheckIcon className="w-6 h-6" />
+        </span>
+        <h1 className="text-3xl font-bold text-brand-navy">Admin Dashboard</h1>
+      </div>
       <p className="text-slate-500 mb-8">Manage website content and monitor document compliance.</p>
 
       <div className="flex gap-2 mb-8 border-b border-slate-200 overflow-x-auto">
         {TABS.map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              activeTab === tab
+            key={tab.label}
+            onClick={() => setActiveTab(tab.label)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              activeTab === tab.label
                 ? "border-brand-orange text-brand-navy"
                 : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
-            {tab}
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
           </button>
         ))}
       </div>
@@ -353,7 +365,9 @@ function ExpiryAlerts() {
         Vehicles with a CNIC, licence, or route permit expiring within 30 days, or already expired.
       </p>
       {alerts.length === 0 && (
-        <p className="text-slate-400 text-sm">No documents are currently expiring or expired. All clear.</p>
+        <p className="text-slate-400 text-sm flex items-center gap-2">
+          <ShieldCheckIcon className="w-4 h-4" /> No documents are currently expiring or expired. All clear.
+        </p>
       )}
       {alerts.map((v) => (
         <div key={v.vehicle_no} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">

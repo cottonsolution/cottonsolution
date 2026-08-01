@@ -5,14 +5,29 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
 import VehicleSearch from "@/components/VehicleSearch";
+import {
+  TruckIcon,
+  PlusIcon,
+  ChartIcon,
+  ShieldCheckIcon,
+  CottonIcon,
+  WheatIcon,
+  RouteIcon,
+  WalletIcon,
+} from "@/components/Icons";
 
 const COMMODITIES = ["Cotton", "Wheat", "Rapeseed"];
-const TABS = ["Post a Load", "Active Shipments", "Verify a Vehicle"];
+const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIcon };
+const TABS = [
+  { label: "Post a Load", icon: PlusIcon },
+  { label: "Active Shipments", icon: ChartIcon },
+  { label: "Verify a Vehicle", icon: ShieldCheckIcon },
+];
 
 export default function MerchantDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
-  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [activeTab, setActiveTab] = useState(TABS[0].label);
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "merchant")) {
@@ -24,21 +39,27 @@ export default function MerchantDashboardPage() {
 
   return (
     <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-bold text-brand-navy mb-1">Merchant Dashboard</h1>
+      <div className="flex items-center gap-3 mb-1">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+          <TruckIcon className="w-6 h-6" />
+        </span>
+        <h1 className="text-3xl font-bold text-brand-navy">Merchant Dashboard</h1>
+      </div>
       <p className="text-slate-500 mb-8">Post loads, track shipments, and verify vehicles before dispatch.</p>
 
       <div className="flex gap-2 mb-8 border-b border-slate-200 overflow-x-auto">
         {TABS.map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              activeTab === tab
+            key={tab.label}
+            onClick={() => setActiveTab(tab.label)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              activeTab === tab.label
                 ? "border-brand-orange text-brand-navy"
                 : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
-            {tab}
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
           </button>
         ))}
       </div>
@@ -77,61 +98,91 @@ function PostLoad({ merchantId }) {
     setForm({ commodity: "Cotton", quantity_munds: "", pickup_location: "", dropoff_location: "", offered_rate: "" });
   }
 
+  const CommodityIcon = COMMODITY_ICON[form.commodity] ?? CottonIcon;
+
   return (
     <form onSubmit={handleSubmit} className="card max-w-xl space-y-5">
-      {success && <p className="text-green-700 text-sm">Load posted — visible to drivers now.</p>}
+      {success && (
+        <p className="text-green-700 text-sm flex items-center gap-2">
+          <TruckIcon className="w-4 h-4 shrink-0" /> Load posted — visible to drivers now.
+        </p>
+      )}
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
       <div>
-        <label className="text-sm font-medium text-slate-700">Commodity</label>
-        <select
-          value={form.commodity}
-          onChange={(e) => setForm((f) => ({ ...f, commodity: e.target.value }))}
-          className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-        >
-          {COMMODITIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <label className="field-label">
+          <CommodityIcon className="w-4 h-4 text-brand-orange" /> Commodity
+        </label>
+        <div className="grid grid-cols-3 gap-3">
+          {COMMODITIES.map((c) => {
+            const Icon = COMMODITY_ICON[c];
+            const active = form.commodity === c;
+            return (
+              <button
+                type="button"
+                key={c}
+                onClick={() => setForm((f) => ({ ...f, commodity: c }))}
+                className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-sm font-semibold transition-colors ${
+                  active ? "border-brand-orange bg-brand-orangeSoft text-brand-navy" : "border-slate-200 text-slate-500"
+                }`}
+              >
+                <Icon className="w-6 h-6" />
+                {c}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div>
-        <label className="text-sm font-medium text-slate-700">Quantity (Munds)</label>
+        <label className="field-label">
+          <ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity (Munds)
+        </label>
         <input
           type="number"
           required
           value={form.quantity_munds}
           onChange={(e) => setForm((f) => ({ ...f, quantity_munds: e.target.value }))}
-          className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+          className="field-input"
         />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm font-medium text-slate-700">Pickup Location</label>
+          <label className="field-label">
+            <RouteIcon className="w-4 h-4 text-brand-orange" /> Pickup Location
+          </label>
           <input
             required
             value={form.pickup_location}
             onChange={(e) => setForm((f) => ({ ...f, pickup_location: e.target.value }))}
-            className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+            className="field-input"
           />
         </div>
         <div>
-          <label className="text-sm font-medium text-slate-700">Drop-off Location</label>
+          <label className="field-label">
+            <RouteIcon className="w-4 h-4 text-brand-orange" /> Drop-off Location
+          </label>
           <input
             required
             value={form.dropoff_location}
             onChange={(e) => setForm((f) => ({ ...f, dropoff_location: e.target.value }))}
-            className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+            className="field-input"
           />
         </div>
       </div>
       <div>
-        <label className="text-sm font-medium text-slate-700">Offered Rate (PKR, optional)</label>
+        <label className="field-label">
+          <WalletIcon className="w-4 h-4 text-brand-orange" /> Offered Rate (PKR, optional)
+        </label>
         <input
           type="number"
           value={form.offered_rate}
           onChange={(e) => setForm((f) => ({ ...f, offered_rate: e.target.value }))}
-          className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+          className="field-input"
         />
       </div>
-      <button type="submit" className="btn-orange w-full">Post Load</button>
+      <button type="submit" className="btn-orange w-full">
+        <PlusIcon className="w-4 h-4" /> Post Load
+      </button>
     </form>
   );
 }
@@ -160,23 +211,37 @@ function ActiveShipments({ merchantId }) {
 
   return (
     <div className="space-y-3">
-      {loads.length === 0 && <p className="text-slate-400 text-sm">No loads posted yet.</p>}
-      {loads.map((l) => (
-        <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold text-brand-navy">
-              {l.commodity} — {l.quantity_munds} munds
-            </p>
-            <p className="text-sm text-slate-500">{l.pickup_location} &rarr; {l.dropoff_location}</p>
+      {loads.length === 0 && (
+        <p className="text-slate-400 text-sm flex items-center gap-2">
+          <ChartIcon className="w-4 h-4" /> No loads posted yet.
+        </p>
+      )}
+      {loads.map((l) => {
+        const CommodityIcon = COMMODITY_ICON[l.commodity] ?? CottonIcon;
+        return (
+          <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+                <CommodityIcon className="w-5 h-5" />
+              </span>
+              <div>
+                <p className="font-semibold text-brand-navy">
+                  {l.commodity} — {l.quantity_munds} munds
+                </p>
+                <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                  <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
+              {biltyMap[l.id] && (
+                <span className="text-xs text-slate-500">Bilty: {biltyMap[l.id].bilty_no}</span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
-            {biltyMap[l.id] && (
-              <span className="text-xs text-slate-500">Bilty: {biltyMap[l.id].bilty_no}</span>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

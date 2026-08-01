@@ -493,6 +493,25 @@ export function XIcon({ className }) {
   );
 }
 
+export function SpeakerOnIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5Z" />
+      <path d="M16.5 9a4.5 4.5 0 0 1 0 6" />
+      <path d="M18.8 6.7a8 8 0 0 1 0 10.6" />
+    </svg>
+  );
+}
+
+export function SpeakerOffIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5Z" />
+      <path d="M16.5 9.5 20 13M20 9.5 16.5 13" />
+    </svg>
+  );
+}
+
 export function TrashIcon({ className }) {
   return (
     <svg className={className} {...base}>

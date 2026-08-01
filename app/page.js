@@ -109,19 +109,8 @@ export default async function HomePage() {
       <section className="relative bg-brand-navy overflow-hidden min-h-[560px] sm:min-h-[620px] lg:min-h-[680px] flex items-center">
         <HeroSlider slides={slides} />
         <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-14 text-center w-full">
-          <span className="section-eyebrow">
-            <TruckIcon className="w-3.5 h-3.5" /> Pakistan&apos;s National Load Network
-          </span>
           <h1 className="text-3xl sm:text-5xl font-bold leading-tight mb-6 text-white">{heading}</h1>
-          <p className="text-slate-200 text-base sm:text-lg max-w-2xl mx-auto mb-10">{subheading}</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/merchant/dashboard" className="btn-orange text-base px-8 py-3.5">
-              <TruckIcon className="w-5 h-5" /> Post a Load (For Merchants)
-            </Link>
-            <Link href="/register" className="btn-outline-light text-base px-8 py-3.5">
-              <TruckCheckIcon className="w-5 h-5" /> Join as Verified Driver
-            </Link>
-          </div>
+          <p className="text-slate-200 text-base sm:text-lg max-w-2xl mx-auto">{subheading}</p>
         </div>
       </section>
 

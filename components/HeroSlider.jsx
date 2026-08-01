@@ -3,11 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { SpeakerOnIcon, SpeakerOffIcon } from "./Icons";
 
+const IMAGE_DURATION_MS = 6000;
+
 /**
  * Full-bleed background carousel for the hero section. Accepts a list of
  * { id, media_url, media_type, caption } slides from Supabase and cross-fades
  * between them. Falls back to nothing (transparent) if no slides exist yet,
  * so the hero still looks correct on a fresh install.
+ *
+ * Timing:
+ *  - Image slides advance automatically after IMAGE_DURATION_MS.
+ *  - Video slides are NOT time-boxed — they play to completion and only
+ *    then advance to the next slide (the `loop` attribute is intentionally
+ *    left off so the browser's native "ended" event fires once).
  *
  * Video slides start muted (required by browsers for autoplay) but show a
  * small speaker toggle so visitors can turn sound on for the slide that's
@@ -18,16 +26,22 @@ import { SpeakerOnIcon, SpeakerOffIcon } from "./Icons";
 export default function HeroSlider({ slides = [] }) {
   const [active, setActive] = useState(0);
   const [muted, setMuted] = useState(true);
-  const timerRef = useRef(null);
   const videoRefs = useRef({});
 
+  function goToNext() {
+    setActive((i) => (i + 1) % slides.length);
+  }
+
+  // Advance automatically — images use a fixed timer, videos advance
+  // themselves via their "ended" event (see the <video> element below).
   useEffect(() => {
     if (slides.length < 2) return;
-    timerRef.current = setInterval(() => {
-      setActive((i) => (i + 1) % slides.length);
-    }, 6000);
-    return () => clearInterval(timerRef.current);
-  }, [slides.length]);
+    const slide = slides[active];
+    if (slide?.media_type === "video") return; // handled by onEnded instead
+    const t = setTimeout(goToNext, IMAGE_DURATION_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, slides.length]);
 
   // Only the visible slide's video should actually play — pause every
   // other one so background videos don't quietly keep running.
@@ -73,8 +87,10 @@ export default function HeroSlider({ slides = [] }) {
               src={slide.media_url}
               autoPlay={i === active}
               muted={muted}
-              loop
               playsInline
+              onEnded={() => {
+                if (i === active && slides.length > 1) goToNext();
+              }}
               className="w-full h-full object-cover"
             />
           ) : (
@@ -85,9 +101,9 @@ export default function HeroSlider({ slides = [] }) {
         </div>
       ))}
 
-      {/* Light, uniform overlay — just enough to keep the white heading/
-          buttons readable on any slide, without washing out the photo or
-          video underneath like a heavy gradient would. */}
+      {/* Light, uniform overlay — just enough to keep the white heading
+          readable on any slide, without washing out the photo or video
+          underneath like a heavy gradient would. */}
       <div className="absolute inset-0 bg-brand-navy/45" />
 
       {showSoundToggle && (

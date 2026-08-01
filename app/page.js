@@ -103,10 +103,12 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* HERO */}
-      <section className="relative bg-brand-navy overflow-hidden">
+      {/* HERO — fixed min-height per breakpoint so background slides always
+          crop to a predictable, consistent ratio (not driven by how long
+          the admin's heading/subheading text happens to be) */}
+      <section className="relative bg-brand-navy overflow-hidden min-h-[560px] sm:min-h-[620px] lg:min-h-[680px] flex items-center">
         <HeroSlider slides={slides} />
-        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-14 text-center">
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-14 text-center w-full">
           <span className="section-eyebrow">
             <TruckIcon className="w-3.5 h-3.5" /> Pakistan&apos;s National Load Network
           </span>

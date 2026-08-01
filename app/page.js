@@ -14,15 +14,64 @@ import {
 } from "@/components/Icons";
 
 async function getHomeData() {
-  const [{ data: content }, { data: services }, { data: steps }] = await Promise.all([
-    supabase.from("site_content").select("*").eq("id", 1).single(),
-    supabase.from("services").select("*").order("sort_order"),
-    supabase.from("how_it_works_steps").select("*").order("sort_order"),
-  ]);
-  return { content, services: services ?? [], steps: steps ?? [] };
+  try {
+    const [{ data: content }, { data: services }, { data: steps }] = await Promise.all([
+      supabase.from("site_content").select("*").eq("id", 1).single(),
+      supabase.from("services").select("*").order("sort_order"),
+      supabase.from("how_it_works_steps").select("*").order("sort_order"),
+    ]);
+    return { content, services: services ?? [], steps: steps ?? [] };
+  } catch (e) {
+    // Supabase not configured yet (no .env.local) — homepage still renders fully below.
+    return { content: null, services: [], steps: [] };
+  }
 }
 
+// Shown exactly as on the reference design whenever the Admin Dashboard
+// hasn't published services/steps yet (or Supabase isn't connected), so the
+// homepage never looks empty.
+const FALLBACK_SERVICES = [
+  {
+    id: "fallback-1",
+    title: "Automatic Load & Trucks Connection",
+    description:
+      "Instant, intelligent matching of available loads with the best verified trucks in your area. Reduce wait times and empty runs.",
+  },
+  {
+    id: "fallback-2",
+    title: "Kanda & Weight Lock",
+    description: "Tamper-proof Kanda weight lock system ensures absolute honesty and rate transparency.",
+  },
+  {
+    id: "fallback-3",
+    title: "Digital Biltys",
+    description: "Auto-generated, secure, and tamper-proof digital bilty generation on weight release.",
+  },
+];
+
+const FALLBACK_STEPS = [
+  {
+    id: "fallback-1",
+    step_number: 1,
+    title: "Post Load",
+    description: "Merchant details load, quantity, and route.",
+  },
+  {
+    id: "fallback-2",
+    step_number: 2,
+    title: "Driver Accepted",
+    description: "Driver confirms load and moves for loading.",
+  },
+  {
+    id: "fallback-3",
+    step_number: 3,
+    title: "Transport & Completed",
+    description: "Goods delivered, bilty generated, payment released.",
+  },
+];
+
 const STEP_ICONS = [ComputerUserIcon, PhoneCheckIcon, TruckCheckIcon];
+const STEP_BG = ["bg-sky-100 text-sky-700", "bg-sky-100 text-sky-700", "bg-green-100 text-green-700"];
 
 const TRUST_POINTS = [
   { icon: ShieldCheckIcon, title: "Verified Drivers", desc: "CNIC, licence & permit checked" },
@@ -32,7 +81,9 @@ const TRUST_POINTS = [
 ];
 
 export default async function HomePage() {
-  const { content, services, steps } = await getHomeData();
+  const { content, services: dbServices, steps: dbSteps } = await getHomeData();
+  const services = dbServices.length ? dbServices : FALLBACK_SERVICES;
+  const steps = dbSteps.length ? dbSteps : FALLBACK_STEPS;
 
   const heading = content?.heading ?? "Pakistan's Smartest Agricultural & Commercial Goods Transport Network";
   const subheading =
@@ -102,11 +153,6 @@ export default async function HomePage() {
               </div>
             );
           })}
-          {services.length === 0 && (
-            <p className="text-slate-400 col-span-full text-center">
-              No services published yet — add some from the Admin Dashboard.
-            </p>
-          )}
         </div>
       </section>
 
@@ -122,9 +168,10 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 relative">
             {steps.map((step, i) => {
               const Icon = STEP_ICONS[i % STEP_ICONS.length];
+              const bg = STEP_BG[i % STEP_BG.length];
               return (
                 <div key={step.id} className="text-center relative">
-                  <div className="icon-badge-round mx-auto bg-brand-navy text-white mb-5 relative shadow-pop">
+                  <div className={`icon-badge-round mx-auto ${bg} mb-5 relative shadow-pop`}>
                     <Icon className="w-9 h-9" />
                     <span className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full bg-brand-orange text-white text-xs font-bold flex items-center justify-center border-2 border-white">
                       {step.step_number}
@@ -135,11 +182,6 @@ export default async function HomePage() {
                 </div>
               );
             })}
-            {steps.length === 0 && (
-              <p className="text-slate-400 col-span-full text-center">
-                No steps published yet — add some from the Admin Dashboard.
-              </p>
-            )}
           </div>
         </div>
       </section>

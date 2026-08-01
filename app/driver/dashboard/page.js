@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
-import DashboardLayout from "@/components/DashboardLayout";
 import {
   TruckIcon,
   GridIcon,
@@ -46,15 +45,14 @@ export default function DriverDashboardPage() {
   if (loading || !user || profile?.role !== "driver") return null;
 
   return (
-    <DashboardLayout
-      roleLabel="Driver"
-      title="Driver Dashboard"
-      subtitle="View open load offers, place bids, and manage your trips."
-      titleIcon={TruckIcon}
-      navItems={TABS}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-    >
+    <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex items-center gap-3 mb-1">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+          <TruckIcon className="w-6 h-6" />
+        </span>
+        <h1 className="text-3xl font-bold text-brand-navy">Driver Dashboard</h1>
+      </div>
+      <p className="text-slate-500 mb-2">View open load offers, place bids, and manage your trips.</p>
       {!myVehicle && (
         <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
           <ShieldCheckIcon className="w-4 h-4 shrink-0" />
@@ -63,9 +61,26 @@ export default function DriverDashboardPage() {
         </p>
       )}
 
+      <div className="flex gap-2 mb-8 border-b border-slate-200 overflow-x-auto">
+        {TABS.map((tab) => (
+          <button
+            key={tab.label}
+            onClick={() => setActiveTab(tab.label)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              activeTab === tab.label
+                ? "border-brand-orange text-brand-navy"
+                : "border-transparent text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {activeTab === "Available Loads" && <AvailableLoads driverId={user.id} vehicle={myVehicle} />}
       {activeTab === "My Trips" && <MyTrips driverId={user.id} vehicle={myVehicle} />}
-    </DashboardLayout>
+    </section>
   );
 }
 

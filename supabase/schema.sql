@@ -53,10 +53,23 @@ create table if not exists public.site_content (
   id          int primary key default 1,
   heading     text not null default 'Pakistan''s Smartest Commercial Goods Transport Network',
   subheading  text not null default 'Connecting verified truck drivers with commodity loads for seamless, transparent, and efficient transport across the nation.',
+  logo_url    text,     -- uploaded from Admin > Home Content, shown in the header
   updated_at  timestamptz default now(),
   constraint single_row check (id = 1)
 );
 insert into public.site_content (id) values (1) on conflict (id) do nothing;
+
+-- ----------------------------------------------------------------------------
+-- 2b. HERO SLIDES  (image/video carousel behind the homepage hero text)
+-- ----------------------------------------------------------------------------
+create table if not exists public.hero_slides (
+  id            uuid primary key default gen_random_uuid(),
+  media_url     text not null,
+  media_type    text not null default 'image' check (media_type in ('image', 'video')),
+  caption       text,
+  sort_order    int default 0,
+  created_at    timestamptz default now()
+);
 
 -- ----------------------------------------------------------------------------
 -- 3. SERVICES  ("Our Services" CMS — full CRUD from Admin Dashboard)
@@ -215,6 +228,7 @@ create trigger on_load_assigned
 -- ============================================================================
 alter table public.profiles enable row level security;
 alter table public.site_content enable row level security;
+alter table public.hero_slides enable row level security;
 alter table public.services enable row level security;
 alter table public.how_it_works_steps enable row level security;
 alter table public.vehicle_types enable row level security;
@@ -243,6 +257,11 @@ create policy "site_content_public_read" on public.site_content
   for select using (true);
 create policy "site_content_admin_write" on public.site_content
   for update using (public.is_admin());
+
+create policy "hero_slides_public_read" on public.hero_slides
+  for select using (true);
+create policy "hero_slides_admin_write" on public.hero_slides
+  for all using (public.is_admin()) with check (public.is_admin());
 
 create policy "services_public_read" on public.services
   for select using (true);
@@ -325,6 +344,24 @@ create policy "driver_documents_owner_or_admin_delete" on storage.objects
   for delete using (
     bucket_id = 'driver-documents' and (owner = auth.uid() or public.is_admin())
   );
+
+-- Bucket for site branding assets: header logo + homepage hero slides
+-- (images or short videos). Publicly readable, admin-only write.
+insert into storage.buckets (id, name, public)
+values ('site-media', 'site-media', true)
+on conflict (id) do nothing;
+
+create policy "site_media_public_read" on storage.objects
+  for select using (bucket_id = 'site-media');
+
+create policy "site_media_admin_write" on storage.objects
+  for insert with check (bucket_id = 'site-media' and public.is_admin());
+
+create policy "site_media_admin_update" on storage.objects
+  for update using (bucket_id = 'site-media' and public.is_admin());
+
+create policy "site_media_admin_delete" on storage.objects
+  for delete using (bucket_id = 'site-media' and public.is_admin());
 
 -- ============================================================================
 -- SEED DATA (Our Services + How It Works — editable later via Admin CMS)

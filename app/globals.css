@@ -9,7 +9,7 @@ html {
 }
 
 body {
-  @apply font-body text-slate-800 bg-brand-slate;
+  @apply font-body text-slate-800 bg-brand-slate overflow-x-hidden;
 }
 
 h1, h2, h3, h4 {
@@ -60,14 +60,57 @@ h1, h2, h3, h4 {
 }
 
 .field-input {
-  @apply w-full border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent;
+  @apply w-full max-w-full box-border border border-slate-300 rounded-xl px-3 py-2.5 text-sm sm:text-base
+    focus:outline-none focus:ring-2 focus:ring-brand-orange focus:border-transparent break-words;
+}
+
+textarea.field-input {
+  @apply resize-y leading-relaxed;
 }
 
 .section-eyebrow {
   @apply inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand-orange bg-brand-orangeSoft px-3 py-1 rounded-full mb-4;
 }
 
+/* ---------------------------------------------------------------------- */
+/* ADMIN DASHBOARD — sidebar + semi-realistic (soft 3D) icon tiles         */
+/* ---------------------------------------------------------------------- */
+
+/* A rounded tile with a subtle gradient, inner highlight and drop shadow —
+   gives flat SVG icons a "semi-realistic" lifted look without needing any
+   raster/3D-rendered image assets. */
+.icon-tile {
+  @apply relative w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-md;
+  background: linear-gradient(155deg, var(--tile-from, #22c55e), var(--tile-to, #15803d));
+}
+.icon-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+}
+.icon-tile svg {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.admin-sidebar-link {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-500 transition-colors;
+}
+.admin-sidebar-link.active {
+  @apply bg-brand-orangeSoft text-brand-navy;
+}
+.admin-sidebar-link:not(.active):hover {
+  @apply bg-slate-100 text-slate-700;
+}
+
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
 }

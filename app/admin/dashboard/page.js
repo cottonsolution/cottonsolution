@@ -4,21 +4,39 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
-import DashboardLayout from "@/components/DashboardLayout";
-import { HomeIcon, GridIcon, RouteIcon, BellIcon, ShieldCheckIcon, TruckIcon, PlusIcon, TrashIcon } from "@/components/Icons";
+import { uploadSiteMedia } from "@/lib/uploadDocument";
+import {
+  HomeIcon,
+  GridIcon,
+  RouteIcon,
+  BellIcon,
+  ShieldCheckIcon,
+  TruckIcon,
+  PlusIcon,
+  TrashIcon,
+  UploadIcon,
+  MenuIcon,
+  CloseIcon,
+  LogoutIcon,
+  ImageIcon,
+} from "@/components/Icons";
 
+// Each tab gets its own gradient (via CSS vars) so the sidebar icon tiles
+// read as distinct, "semi-realistic" colour-coded shortcuts rather than
+// same-colour line icons — easier for non-reading users to tell apart.
 const TABS = [
-  { label: "Home Content", icon: HomeIcon },
-  { label: "Our Services", icon: GridIcon },
-  { label: "How It Works", icon: RouteIcon },
-  { label: "Vehicle Types", icon: TruckIcon },
-  { label: "Expiry Alerts", icon: BellIcon },
+  { label: "Home Content", icon: HomeIcon, from: "#38bdf8", to: "#0369a1" },
+  { label: "Our Services", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
+  { label: "How It Works", icon: RouteIcon, from: "#fb923c", to: "#c2410c" },
+  { label: "Vehicle Types", icon: TruckIcon, from: "#4ade80", to: "#15803d" },
+  { label: "Expiry Alerts", icon: BellIcon, from: "#f87171", to: "#b91c1c" },
 ];
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "admin")) {
@@ -26,72 +44,362 @@ export default function AdminDashboardPage() {
     }
   }, [loading, user, profile, router]);
 
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
   if (loading || !user || profile?.role !== "admin") return null;
 
+  const activeMeta = TABS.find((t) => t.label === activeTab);
+
   return (
-    <DashboardLayout
-      roleLabel="Admin"
-      title="Admin Dashboard"
-      subtitle="Manage website content and monitor document compliance."
-      titleIcon={ShieldCheckIcon}
-      navItems={TABS}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-    >
-      {activeTab === "Home Content" && <HomeContentManager />}
-      {activeTab === "Our Services" && <ServicesManager />}
-      {activeTab === "How It Works" && <StepsManager />}
-      {activeTab === "Vehicle Types" && <VehicleTypesManager />}
-      {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
-    </DashboardLayout>
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <span className="icon-tile w-12 h-12" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
+            <ShieldCheckIcon className="w-6 h-6 text-white" />
+          </span>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-brand-navy leading-tight">Admin Dashboard</h1>
+            <p className="text-slate-500 text-sm hidden sm:block">Manage website content and monitor compliance.</p>
+          </div>
+        </div>
+
+        {/* mobile hamburger — opens the sidebar as a slide-in drawer */}
+        <button
+          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open menu"
+        >
+          <MenuIcon className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex gap-6 items-start">
+        {/* DESKTOP SIDEBAR — the single source of dashboard navigation */}
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white rounded-2xl shadow-card p-3 sticky top-24 gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.label}
+              onClick={() => setActiveTab(tab.label)}
+              className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
+            >
+              <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+                <tab.icon className="w-5 h-5 text-white" />
+              </span>
+              {tab.label}
+            </button>
+          ))}
+          <div className="border-t border-slate-100 mt-2 pt-2">
+            <button onClick={handleLogout} className="admin-sidebar-link text-red-500 hover:bg-red-50 w-full">
+              <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+                <LogoutIcon className="w-5 h-5 text-white" />
+              </span>
+              Logout
+            </button>
+          </div>
+        </aside>
+
+        {/* MOBILE DRAWER — slides in from the left with a dimmed overlay */}
+        {drawerOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+            <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl p-4 flex flex-col gap-1 animate-[slideIn_0.25s_ease-out]">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-bold text-brand-navy">Menu</span>
+                <button onClick={() => setDrawerOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400">
+                  <CloseIcon className="w-5 h-5" />
+                </button>
+              </div>
+              {TABS.map((tab) => (
+                <button
+                  key={tab.label}
+                  onClick={() => {
+                    setActiveTab(tab.label);
+                    setDrawerOpen(false);
+                  }}
+                  className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
+                >
+                  <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+                    <tab.icon className="w-5 h-5 text-white" />
+                  </span>
+                  {tab.label}
+                </button>
+              ))}
+              <div className="border-t border-slate-100 mt-2 pt-2">
+                <button onClick={handleLogout} className="admin-sidebar-link text-red-500 w-full">
+                  <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+                    <LogoutIcon className="w-5 h-5 text-white" />
+                  </span>
+                  Logout
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* CONTENT */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-6 lg:hidden overflow-x-auto pb-1">
+            <span className="icon-tile w-9 h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
+              <activeMeta.icon className="w-4 h-4 text-white" />
+            </span>
+            <h2 className="font-bold text-brand-navy whitespace-nowrap">{activeTab}</h2>
+          </div>
+
+          {activeTab === "Home Content" && <HomeContentManager />}
+          {activeTab === "Our Services" && <ServicesManager />}
+          {activeTab === "How It Works" && <StepsManager />}
+          {activeTab === "Vehicle Types" && <VehicleTypesManager />}
+          {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
+        </div>
+      </div>
+    </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// TAB 1: HOME PAGE CONTENT MANAGER
+// TAB 1: HOME PAGE CONTENT MANAGER — heading/subheading, logo, hero slides
 // ---------------------------------------------------------------------------
 function HomeContentManager() {
-  const [form, setForm] = useState({ heading: "", subheading: "" });
+  const [form, setForm] = useState({ heading: "", subheading: "", logo_url: "" });
   const [saved, setSaved] = useState(false);
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    supabase
-      .from("site_content")
-      .select("*")
-      .eq("id", 1)
-      .single()
-      .then(({ data }) => data && setForm({ heading: data.heading, subheading: data.subheading }));
-  }, []);
+  async function refreshContent() {
+    const { data } = await supabase.from("site_content").select("*").eq("id", 1).single();
+    if (data) setForm({ heading: data.heading, subheading: data.subheading, logo_url: data.logo_url ?? "" });
+  }
+  useEffect(() => { refreshContent(); }, []);
 
   async function handleSave(e) {
     e.preventDefault();
     setSaved(false);
+    setError("");
     await supabase.from("site_content").update({ heading: form.heading, subheading: form.subheading }).eq("id", 1);
     setSaved(true);
   }
 
+  async function handleLogoUpload() {
+    if (!logoFile) return;
+    setLogoUploading(true);
+    setError("");
+    try {
+      const url = await uploadSiteMedia(logoFile, "logo");
+      await supabase.from("site_content").update({ logo_url: url }).eq("id", 1);
+      setForm((f) => ({ ...f, logo_url: url }));
+      setLogoFile(null);
+    } catch (err) {
+      setError(err.message ?? "Logo upload failed.");
+    } finally {
+      setLogoUploading(false);
+    }
+  }
+
   return (
-    <form onSubmit={handleSave} className="card max-w-xl space-y-5">
+    <div className="space-y-8">
+      {/* Heading / Sub-heading */}
+      <form onSubmit={handleSave} className="card max-w-xl space-y-5">
+        <h3 className="font-semibold text-brand-navy">Hero Text</h3>
+        <div>
+          <label className="field-label">Main Heading</label>
+          <textarea
+            rows={2}
+            value={form.heading}
+            onChange={(e) => setForm((f) => ({ ...f, heading: e.target.value }))}
+            className="field-input"
+          />
+        </div>
+        <div>
+          <label className="field-label">Sub-Heading</label>
+          <textarea
+            rows={3}
+            value={form.subheading}
+            onChange={(e) => setForm((f) => ({ ...f, subheading: e.target.value }))}
+            className="field-input"
+          />
+        </div>
+        <button type="submit" className="btn-orange">Save Changes</button>
+        {saved && <p className="text-green-700 text-sm">Home page content updated.</p>}
+      </form>
+
+      {/* Logo upload */}
+      <div className="card max-w-xl space-y-4">
+        <h3 className="font-semibold text-brand-navy">Header Logo</h3>
+        <p className="text-sm text-slate-500">
+          Uploaded here, this logo replaces the default emblem in the site header automatically.
+        </p>
+        <div className="flex items-center gap-4">
+          {form.logo_url ? (
+            <img src={form.logo_url} alt="Current logo" className="w-16 h-16 rounded-full object-cover border border-slate-200" />
+          ) : (
+            <span className="icon-tile w-16 h-16" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+              <ImageIcon className="w-7 h-7 text-white" />
+            </span>
+          )}
+          <label className="flex-1 flex items-center gap-3 border border-dashed border-slate-300 rounded-xl px-3 py-3 cursor-pointer hover:border-brand-orange transition-colors">
+            <span className="icon-badge bg-brand-orangeSoft text-brand-orange w-9 h-9 rounded-lg">
+              <UploadIcon className="w-4 h-4" />
+            </span>
+            <span className="text-sm text-slate-500 truncate">{logoFile ? logoFile.name : "Choose a logo image"}</span>
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} />
+          </label>
+        </div>
+        {logoFile && (
+          <button onClick={handleLogoUpload} disabled={logoUploading} className="btn-orange">
+            {logoUploading ? "Uploading..." : "Upload Logo"}
+          </button>
+        )}
+        {error && <p className="text-red-600 text-sm">{error}</p>}
+      </div>
+
+      <HeroSlidesManager />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hero image/video slides manager (list + add + edit caption + delete)
+// ---------------------------------------------------------------------------
+function HeroSlidesManager() {
+  const [slides, setSlides] = useState([]);
+  const [file, setFile] = useState(null);
+  const [caption, setCaption] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+
+  async function refresh() {
+    const { data } = await supabase.from("hero_slides").select("*").order("sort_order");
+    setSlides(data ?? []);
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (!file) return;
+    setUploading(true);
+    setError("");
+    try {
+      const mediaType = file.type.startsWith("video") ? "video" : "image";
+      const url = await uploadSiteMedia(file, "slides");
+      const { error: insertError } = await supabase.from("hero_slides").insert({
+        media_url: url,
+        media_type: mediaType,
+        caption: caption.trim() || null,
+        sort_order: slides.length + 1,
+      });
+      if (insertError) throw insertError;
+      setFile(null);
+      setCaption("");
+      refresh();
+    } catch (err) {
+      setError(err.message ?? "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleCaptionSave(id, newCaption) {
+    await supabase.from("hero_slides").update({ caption: newCaption }).eq("id", id);
+    setEditingId(null);
+    refresh();
+  }
+
+  async function handleDelete(id) {
+    await supabase.from("hero_slides").delete().eq("id", id);
+    refresh();
+  }
+
+  return (
+    <div className="card max-w-xl space-y-5">
       <div>
-        <label className="text-sm font-medium text-slate-700">Main Heading</label>
+        <h3 className="font-semibold text-brand-navy">Hero Background Slides</h3>
+        <p className="text-sm text-slate-500">
+          Add photos or short videos to rotate behind the homepage heading — looks great on both mobile and desktop.
+        </p>
+      </div>
+
+      <form onSubmit={handleAdd} className="space-y-3">
+        <label className="flex items-center gap-3 border border-dashed border-slate-300 rounded-xl px-3 py-3 cursor-pointer hover:border-brand-orange transition-colors">
+          <span className="icon-badge bg-brand-orangeSoft text-brand-orange w-9 h-9 rounded-lg">
+            <UploadIcon className="w-4 h-4" />
+          </span>
+          <span className="text-sm text-slate-500 truncate">
+            {file ? file.name : "Choose an image or video"}
+          </span>
+          <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
         <input
-          value={form.heading}
-          onChange={(e) => setForm((f) => ({ ...f, heading: e.target.value }))}
-          className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+          value={caption}
+          onChange={(e) => setCaption(e.target.value)}
+          placeholder="Caption (optional)"
+          className="field-input"
         />
+        <button type="submit" disabled={!file || uploading} className="btn-orange w-full">
+          <PlusIcon className="w-4 h-4" />
+          {uploading ? "Uploading..." : "Add Slide"}
+        </button>
+      </form>
+      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      <div className="space-y-3 pt-2 border-t border-slate-100">
+        {slides.length === 0 && <p className="text-slate-400 text-sm">No slides yet — add one above.</p>}
+        {slides.map((s) => (
+          <SlideRow
+            key={s.id}
+            slide={s}
+            isEditing={editingId === s.id}
+            onEdit={() => setEditingId(s.id)}
+            onCancel={() => setEditingId(null)}
+            onSave={(c) => handleCaptionSave(s.id, c)}
+            onDelete={() => handleDelete(s.id)}
+          />
+        ))}
       </div>
-      <div>
-        <label className="text-sm font-medium text-slate-700">Sub-Heading</label>
-        <textarea
-          rows={3}
-          value={form.subheading}
-          onChange={(e) => setForm((f) => ({ ...f, subheading: e.target.value }))}
-          className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
-        />
+    </div>
+  );
+}
+
+function SlideRow({ slide, isEditing, onEdit, onCancel, onSave, onDelete }) {
+  const [caption, setCaption] = useState(slide.caption ?? "");
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-16 h-12 rounded-lg overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center">
+        {slide.media_type === "video" ? (
+          <video src={slide.media_url} className="w-full h-full object-cover" muted />
+        ) : (
+          <img src={slide.media_url} alt={slide.caption ?? "slide"} className="w-full h-full object-cover" />
+        )}
       </div>
-      <button type="submit" className="btn-orange">Save Changes</button>
-      {saved && <p className="text-green-700 text-sm">Home page content updated.</p>}
-    </form>
+      <span className="icon-badge bg-slate-100 text-slate-500 w-7 h-7 rounded-md shrink-0">
+        {slide.media_type === "video" ? <VideoIcon className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
+      </span>
+      {isEditing ? (
+        <input value={caption} onChange={(e) => setCaption(e.target.value)} className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm" />
+      ) : (
+        <p className="flex-1 text-sm text-slate-600 truncate">{slide.caption || "—"}</p>
+      )}
+      <div className="flex gap-1.5 shrink-0">
+        {isEditing ? (
+          <>
+            <button onClick={() => onSave(caption)} className="btn-orange px-3 py-1.5 text-xs">Save</button>
+            <button onClick={onCancel} className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg">Cancel</button>
+          </>
+        ) : (
+          <>
+            <button onClick={onEdit} className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg">Edit</button>
+            <button onClick={onDelete} className="px-2 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg">
+              <TrashIcon className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

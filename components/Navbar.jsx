@@ -1,11 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { HomeIcon, GridIcon, TruckIcon, InfoIcon, LoginIcon, MenuIcon, CloseIcon } from "./Icons";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import {
+  HomeIcon,
+  GridIcon,
+  RouteIcon,
+  ShieldCheckIcon,
+  InfoIcon,
+  MailIcon,
+  LoginIcon,
+  MenuIcon,
+  CloseIcon,
+} from "./Icons";
 
 // Emblem mark: a rounded seal with a crescent + star, echoing Pakistan's
-// flag — reinforces "national network" without needing any reading.
+// flag — used as a fallback whenever no logo has been uploaded yet.
 function EmblemIcon({ className }) {
   return (
     <svg viewBox="0 0 48 48" className={className} xmlns="http://www.w3.org/2000/svg">
@@ -23,53 +34,70 @@ function EmblemIcon({ className }) {
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: HomeIcon },
   { href: "/services", label: "Our Services", icon: GridIcon },
-  { href: "/register", label: "For Drivers", icon: TruckIcon },
+  { href: "/#how-it-works", label: "How It Works", icon: RouteIcon },
+  { href: "/vehicle-verification", label: "Vehicle Verification", icon: ShieldCheckIcon },
   { href: "/about", label: "About Us", icon: InfoIcon },
+  { href: "/contact", label: "Contact Us", icon: MailIcon },
 ];
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(null);
+
+  useEffect(() => {
+    supabase
+      .from("site_content")
+      .select("logo_url")
+      .eq("id", 1)
+      .single()
+      .then(({ data }) => data?.logo_url && setLogoUrl(data.logo_url))
+      .catch(() => {});
+  }, []);
 
   return (
     <header className="bg-brand-navy sticky top-0 z-50 shadow-lg">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <EmblemIcon className="w-9 h-9 shrink-0" />
-          <span className="text-white font-display font-bold text-sm sm:text-lg leading-tight">
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <Link href="/" className="flex items-center gap-2.5 shrink-0">
+          {logoUrl ? (
+            <img src={logoUrl} alt="Smart Goods Transport Company" className="w-9 h-9 rounded-full object-cover shrink-0" />
+          ) : (
+            <EmblemIcon className="w-9 h-9 shrink-0" />
+          )}
+          <span className="text-white font-display font-bold text-sm sm:text-base leading-tight hidden sm:block">
             Smart Goods Transport Company
           </span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-7">
+        <div className="hidden lg:flex items-center gap-5 xl:gap-6">
           {NAV_LINKS.map((link) => {
             const Icon = link.icon;
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className="flex items-center gap-1.5 text-slate-200 hover:text-brand-orange text-sm font-medium transition-colors"
+                className="flex items-center gap-1.5 text-slate-200 hover:text-brand-orange text-sm font-medium transition-colors whitespace-nowrap"
               >
-                <Icon className="w-[18px] h-[18px]" />
+                <Icon className="w-[16px] h-[16px] shrink-0" />
                 {link.label}
               </Link>
             );
           })}
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden lg:block shrink-0">
           <Link href="/login" className="btn-orange text-sm py-2.5">
             <LoginIcon className="w-4 h-4" />
             Login / Signup
           </Link>
         </div>
 
-        <button className="md:hidden text-white" onClick={() => setOpen(!open)} aria-label="Toggle menu">
+        <button className="lg:hidden text-white shrink-0" onClick={() => setOpen(!open)} aria-label="Toggle menu">
           {open ? <CloseIcon className="w-7 h-7" /> : <MenuIcon className="w-7 h-7" />}
         </button>
       </nav>
 
       {open && (
-        <div className="md:hidden bg-brand-navy border-t border-white/10 px-4 pb-4 flex flex-col gap-1">
+        <div className="lg:hidden bg-brand-navy border-t border-white/10 px-4 pb-4 flex flex-col gap-1">
           {NAV_LINKS.map((link) => {
             const Icon = link.icon;
             return (

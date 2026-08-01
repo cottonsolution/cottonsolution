@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { getServiceIcon } from "@/lib/serviceIcons";
+import HeroSlider from "@/components/HeroSlider";
 import {
   TruckIcon,
   TruckCheckIcon,
@@ -16,15 +17,16 @@ import {
 
 async function getHomeData() {
   try {
-    const [{ data: content }, { data: services }, { data: steps }] = await Promise.all([
+    const [{ data: content }, { data: services }, { data: steps }, { data: slides }] = await Promise.all([
       supabase.from("site_content").select("*").eq("id", 1).single(),
       supabase.from("services").select("*").order("sort_order"),
       supabase.from("how_it_works_steps").select("*").order("sort_order"),
+      supabase.from("hero_slides").select("*").order("sort_order"),
     ]);
-    return { content, services: services ?? [], steps: steps ?? [] };
+    return { content, services: services ?? [], steps: steps ?? [], slides: slides ?? [] };
   } catch (e) {
     // Supabase not configured yet (no .env.local) — homepage still renders fully below.
-    return { content: null, services: [], steps: [] };
+    return { content: null, services: [], steps: [], slides: [] };
   }
 }
 
@@ -82,7 +84,7 @@ const TRUST_POINTS = [
 ];
 
 export default async function HomePage() {
-  const { content, services: dbServices, steps: dbSteps } = await getHomeData();
+  const { content, services: dbServices, steps: dbSteps, slides } = await getHomeData();
   const services = dbServices.length ? dbServices : FALLBACK_SERVICES;
   const steps = dbSteps.length ? dbSteps : FALLBACK_STEPS;
 
@@ -94,18 +96,19 @@ export default async function HomePage() {
   return (
     <>
       {/* HERO */}
-      <section className="bg-brand-slate">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-14 text-center">
+      <section className="relative bg-brand-navy overflow-hidden">
+        <HeroSlider slides={slides} />
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-14 text-center">
           <span className="section-eyebrow">
             <TruckIcon className="w-3.5 h-3.5" /> Pakistan&apos;s National Load Network
           </span>
-          <h1 className="text-3xl sm:text-5xl font-bold leading-tight mb-6 text-brand-navy">{heading}</h1>
-          <p className="text-slate-500 text-base sm:text-lg max-w-2xl mx-auto mb-10">{subheading}</p>
+          <h1 className="text-3xl sm:text-5xl font-bold leading-tight mb-6 text-white">{heading}</h1>
+          <p className="text-slate-200 text-base sm:text-lg max-w-2xl mx-auto mb-10">{subheading}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/merchant/dashboard" className="btn-orange text-base px-8 py-3.5">
               <TruckIcon className="w-5 h-5" /> Post a Load (For Merchants)
             </Link>
-            <Link href="/register" className="btn-outline text-base px-8 py-3.5">
+            <Link href="/register" className="btn-outline-light text-base px-8 py-3.5">
               <TruckCheckIcon className="w-5 h-5" /> Join as Verified Driver
             </Link>
           </div>
@@ -158,7 +161,7 @@ export default async function HomePage() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="bg-white border-t border-slate-100">
+      <section id="how-it-works" className="bg-white border-t border-slate-100 scroll-mt-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center mb-14">
             <span className="section-eyebrow">

@@ -399,6 +399,25 @@ export function FilterIcon({ className }) {
   );
 }
 
+export function ImageIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="9" cy="10" r="1.7" />
+      <path d="M4 17l5.5-5.5a2 2 0 0 1 2.8 0L20 19" />
+    </svg>
+  );
+}
+
+export function VideoIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <rect x="3.5" y="6" width="12" height="12" rx="2" />
+      <path d="M15.5 10l5-2.8v9.6l-5-2.8" />
+    </svg>
+  );
+}
+
 export function LogoutIcon({ className }) {
   return (
     <svg className={className} {...base}>

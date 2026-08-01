@@ -29,15 +29,6 @@ module.exports = {
       borderRadius: {
         xl2: "1.25rem",
       },
-      keyframes: {
-        slideIn: {
-          "0%": { transform: "translateX(-100%)" },
-          "100%": { transform: "translateX(0)" },
-        },
-      },
-      animation: {
-        "slide-in": "slideIn 0.18s ease-out",
-      },
     },
   },
   plugins: [],

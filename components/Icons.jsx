@@ -408,3 +408,126 @@ export function LogoutIcon({ className }) {
     </svg>
   );
 }
+
+export function UploadIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M12 15.5V4" />
+      <path d="M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M4.5 15.5V19a1.5 1.5 0 0 0 1.5 1.5h12A1.5 1.5 0 0 0 19.5 19v-3.5" />
+    </svg>
+  );
+}
+
+export function BuildingIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <rect x="4" y="3" width="12" height="18" rx="1" />
+      <path d="M16 9h4v12h-4" />
+      <path d="M7.5 7h1.5M11 7h1.5M7.5 10.5h1.5M11 10.5h1.5M7.5 14h1.5M11 14h1.5" />
+      <path d="M9 21v-3.5h2V21" />
+    </svg>
+  );
+}
+
+export function TrashIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4.5 7h15" />
+      <path d="M9 7V4.8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7" />
+      <path d="M6.5 7 7.3 19a1.6 1.6 0 0 0 1.6 1.5h6.2a1.6 1.6 0 0 0 1.6-1.5L17.5 7" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DETAILED "HOW IT WORKS" ILLUSTRATIONS — flat, multi-colour character art
+// (not simple line icons) so the 3-step story reads at a glance even for
+// someone who can't read the caption underneath it.
+// ---------------------------------------------------------------------------
+
+// Step 1 — Merchant posting a load from a desk/computer
+export function PostLoadIllustration({ className }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* desk */}
+      <rect x="14" y="70" width="72" height="6" rx="1.5" fill="#c8925a" />
+      <rect x="20" y="76" width="6" height="12" fill="#a97540" />
+      <rect x="74" y="76" width="6" height="12" fill="#a97540" />
+      {/* monitor */}
+      <rect x="34" y="38" width="32" height="24" rx="2.5" fill="#0e3b2e" />
+      <rect x="37.5" y="41.5" width="25" height="17" rx="1.5" fill="#eaf6f0" />
+      <path d="M41 47h11M41 51h17M41 55h8" stroke="#146c43" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="46" y="62" width="8" height="5" fill="#0e3b2e" />
+      <rect x="41" y="67" width="18" height="3" rx="1" fill="#0e3b2e" />
+      {/* person */}
+      <circle cx="50" cy="24" r="8.5" fill="#e8b17f" />
+      <path d="M42 23c1-4.5 3.7-6.5 8-6.5s7 2 8 6.5" fill="#3a2317" />
+      <path d="M32 62c1-11 8-16 18-16s17 5 18 16" fill="#f2711f" />
+      <rect x="41" y="52" width="18" height="10" rx="3" fill="#eaf6f0" />
+      {/* hands on desk */}
+      <circle cx="40" cy="63" r="3" fill="#e8b17f" />
+      <circle cx="60" cy="63" r="3" fill="#e8b17f" />
+      {/* floating "load posted" card */}
+      <rect x="66" y="18" width="22" height="16" rx="3" fill="#ffffff" stroke="#146c43" strokeWidth="1.6" />
+      <path d="M70 24h14M70 28h9" stroke="#146c43" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="83" cy="21" r="3.2" fill="#f2711f" />
+      <path d="M81.4 21l1.1 1.1 2-2.1" stroke="#ffffff" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Step 2 — Verified driver accepting the load on a phone
+export function DriverAcceptIllustration({ className }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* ground shadow */}
+      <ellipse cx="50" cy="88" rx="26" ry="4" fill="#0e3b2e" opacity="0.08" />
+      {/* body */}
+      <path d="M30 88c1-16 9-24 20-24s19 8 20 24z" fill="#f2711f" />
+      <rect x="40" y="60" width="20" height="10" rx="2" fill="#155743" />
+      {/* head */}
+      <circle cx="50" cy="34" r="10" fill="#e8b17f" />
+      <path d="M40 33c0-6 4.5-10 10-10s10 4 10 10c-3-1-6-3.5-7-6-1.5 3-6.5 5.5-13 6z" fill="#3a2317" />
+      {/* cap */}
+      <path d="M39 28a11 11 0 0 1 22 0c-3-1.5-7-2.3-11-2.3s-8 .8-11 2.3z" fill="#0e3b2e" />
+      <rect x="38" y="27.5" width="24" height="3" rx="1.5" fill="#0e3b2e" />
+      {/* arm holding phone */}
+      <path d="M60 58c8-2 12-8 12-15" stroke="#e8b17f" strokeWidth="7" strokeLinecap="round" fill="none" />
+      {/* phone */}
+      <rect x="66" y="34" width="16" height="26" rx="3" fill="#155743" />
+      <rect x="68.5" y="37" width="11" height="17" rx="1.5" fill="#eaf6f0" />
+      <circle cx="74" cy="45.5" r="4.6" fill="#f2711f" />
+      <path d="M72 45.5l1.4 1.4 2.6-2.8" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      {/* other arm on hip */}
+      <path d="M40 58c-6-1-9-5-9.5-10.5" stroke="#e8b17f" strokeWidth="7" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
+// Step 3 — Truck completing delivery with a bilty/checkmark
+export function DeliveryIllustration({ className }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
+      {/* road */}
+      <rect x="8" y="78" width="84" height="6" rx="1.5" fill="#0e3b2e" opacity="0.12" />
+      {/* truck cargo box */}
+      <rect x="14" y="42" width="42" height="30" rx="2.5" fill="#146c43" />
+      <rect x="18" y="46" width="34" height="9" rx="1.5" fill="#eaf6f0" opacity="0.85" />
+      {/* cabin */}
+      <path d="M56 54h13l11 10v8H56z" fill="#0e3b2e" />
+      <rect x="61" y="58" width="10" height="8" rx="1.5" fill="#bfe3d6" />
+      {/* wheels */}
+      <circle cx="28" cy="76" r="6.5" fill="#1f2937" />
+      <circle cx="28" cy="76" r="2.6" fill="#cbd5e1" />
+      <circle cx="70" cy="76" r="6.5" fill="#1f2937" />
+      <circle cx="70" cy="76" r="2.6" fill="#cbd5e1" />
+      {/* motion lines */}
+      <path d="M4 50h8M2 58h10M4 66h7" stroke="#f2711f" strokeWidth="2.4" strokeLinecap="round" opacity="0.55" />
+      {/* completed badge */}
+      <circle cx="80" cy="30" r="13" fill="#ffffff" stroke="#f2711f" strokeWidth="2.4" />
+      <path d="M74.5 30l4 4 8-8.5" stroke="#f2711f" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}

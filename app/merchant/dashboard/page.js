@@ -14,14 +14,20 @@ import {
   WheatIcon,
   RouteIcon,
   WalletIcon,
+  BuildingIcon,
+  MapPinIcon,
+  IdCardIcon,
+  UserIcon,
+  PhoneIcon,
 } from "@/components/Icons";
 
-const COMMODITIES = ["Cotton", "Wheat", "Rapeseed"];
-const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIcon };
+const COMMODITIES = ["Cotton", "Wheat", "Rapeseed", "Maize", "Rice", "Sugarcane", "Other"];
+const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIcon, Maize: WheatIcon, Rice: WheatIcon, Sugarcane: WheatIcon, Other: TruckIcon };
 const TABS = [
   { label: "Post a Load", icon: PlusIcon },
   { label: "Active Shipments", icon: ChartIcon },
   { label: "Verify a Vehicle", icon: ShieldCheckIcon },
+  { label: "My Profile", icon: BuildingIcon },
 ];
 
 export default function MerchantDashboardPage() {
@@ -67,14 +73,18 @@ export default function MerchantDashboardPage() {
       {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
       {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} />}
       {activeTab === "Verify a Vehicle" && <VehicleSearch />}
+      {activeTab === "My Profile" && <MerchantProfile userId={user.id} initialProfile={profile} />}
     </section>
   );
 }
 
+const MUNDS_PER_TON = 26.796; // 1 metric ton ≈ 26.8 Pakistani munds (37.32 kg each)
+
 function PostLoad({ merchantId }) {
   const [form, setForm] = useState({
     commodity: "Cotton",
-    quantity_munds: "",
+    quantity_value: "",
+    quantity_unit: "Munds",
     pickup_location: "",
     dropoff_location: "",
     offered_rate: "",
@@ -85,17 +95,22 @@ function PostLoad({ merchantId }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    const value = Number(form.quantity_value);
+    const quantityMunds = form.quantity_unit === "Tons" ? Math.round(value * MUNDS_PER_TON * 100) / 100 : value;
+
     const { error: insertError } = await supabase.from("loads").insert({
       merchant_id: merchantId,
       commodity: form.commodity,
-      quantity_munds: Number(form.quantity_munds),
+      quantity_munds: quantityMunds,
+      quantity_value: value,
+      quantity_unit: form.quantity_unit,
       pickup_location: form.pickup_location,
       dropoff_location: form.dropoff_location,
       offered_rate: form.offered_rate ? Number(form.offered_rate) : null,
     });
     if (insertError) return setError(insertError.message);
     setSuccess(true);
-    setForm({ commodity: "Cotton", quantity_munds: "", pickup_location: "", dropoff_location: "", offered_rate: "" });
+    setForm({ commodity: "Cotton", quantity_value: "", quantity_unit: "Munds", pickup_location: "", dropoff_location: "", offered_rate: "" });
   }
 
   const CommodityIcon = COMMODITY_ICON[form.commodity] ?? CottonIcon;
@@ -135,15 +150,34 @@ function PostLoad({ merchantId }) {
       </div>
       <div>
         <label className="field-label">
-          <ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity (Munds)
+          <ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity
         </label>
-        <input
-          type="number"
-          required
-          value={form.quantity_munds}
-          onChange={(e) => setForm((f) => ({ ...f, quantity_munds: e.target.value }))}
-          className="field-input"
-        />
+        <div className="flex gap-3">
+          <input
+            type="number"
+            required
+            min="0"
+            step="0.01"
+            placeholder="Amount"
+            value={form.quantity_value}
+            onChange={(e) => setForm((f) => ({ ...f, quantity_value: e.target.value }))}
+            className="field-input flex-1"
+          />
+          <div className="flex rounded-xl bg-slate-100 p-1 shrink-0">
+            {["Munds", "Tons"].map((u) => (
+              <button
+                type="button"
+                key={u}
+                onClick={() => setForm((f) => ({ ...f, quantity_unit: u }))}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  form.quantity_unit === u ? "bg-white shadow text-brand-navy" : "text-slate-500"
+                }`}
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -171,7 +205,7 @@ function PostLoad({ merchantId }) {
       </div>
       <div>
         <label className="field-label">
-          <WalletIcon className="w-4 h-4 text-brand-orange" /> Offered Rate (PKR, optional)
+          <WalletIcon className="w-4 h-4 text-brand-orange" /> Target Freight Rate (PKR, optional)
         </label>
         <input
           type="number"
@@ -183,6 +217,111 @@ function PostLoad({ merchantId }) {
       <button type="submit" className="btn-orange w-full">
         <PlusIcon className="w-4 h-4" /> Post Load
       </button>
+    </form>
+  );
+}
+
+function MerchantProfile({ userId, initialProfile }) {
+  const [form, setForm] = useState({
+    full_name: "",
+    phone: "",
+    company_name: "",
+    business_city: "",
+    ntn_number: "",
+    warehouse_address: "",
+  });
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (initialProfile) {
+      setForm({
+        full_name: initialProfile.full_name ?? "",
+        phone: initialProfile.phone ?? "",
+        company_name: initialProfile.company_name ?? "",
+        business_city: initialProfile.business_city ?? "",
+        ntn_number: initialProfile.ntn_number ?? "",
+        warehouse_address: initialProfile.warehouse_address ?? "",
+      });
+    }
+  }, [initialProfile]);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setSaved(false);
+    setError("");
+    const { error: updateError } = await supabase.from("profiles").update(form).eq("id", userId);
+    if (updateError) return setError(updateError.message);
+    setSaved(true);
+  }
+
+  return (
+    <form onSubmit={handleSave} className="card max-w-xl space-y-5">
+      {saved && <p className="text-green-700 text-sm">Profile updated.</p>}
+      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      <div>
+        <label className="field-label">
+          <UserIcon className="w-4 h-4 text-brand-orange" /> Owner / Representative Name
+        </label>
+        <input
+          value={form.full_name}
+          onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+          className="field-input"
+        />
+      </div>
+      <div>
+        <label className="field-label">
+          <PhoneIcon className="w-4 h-4 text-brand-orange" /> Mobile No
+        </label>
+        <input
+          value={form.phone}
+          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+          className="field-input"
+        />
+      </div>
+      <div>
+        <label className="field-label">
+          <BuildingIcon className="w-4 h-4 text-brand-orange" /> Merchant / Company Name
+        </label>
+        <input
+          value={form.company_name}
+          onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
+          className="field-input"
+        />
+      </div>
+      <div>
+        <label className="field-label">
+          <MapPinIcon className="w-4 h-4 text-brand-orange" /> Business City / Location
+        </label>
+        <input
+          value={form.business_city}
+          onChange={(e) => setForm((f) => ({ ...f, business_city: e.target.value }))}
+          className="field-input"
+        />
+      </div>
+      <div>
+        <label className="field-label">
+          <IdCardIcon className="w-4 h-4 text-brand-orange" /> Business / NTN Number
+        </label>
+        <input
+          value={form.ntn_number}
+          onChange={(e) => setForm((f) => ({ ...f, ntn_number: e.target.value }))}
+          className="field-input"
+        />
+      </div>
+      <div>
+        <label className="field-label">
+          <BuildingIcon className="w-4 h-4 text-brand-orange" /> Address / Warehouse Location
+        </label>
+        <textarea
+          rows={2}
+          value={form.warehouse_address}
+          onChange={(e) => setForm((f) => ({ ...f, warehouse_address: e.target.value }))}
+          className="field-input"
+        />
+      </div>
+      <button type="submit" className="btn-orange w-full">Save Profile</button>
     </form>
   );
 }
@@ -226,7 +365,7 @@ function ActiveShipments({ merchantId }) {
               </span>
               <div>
                 <p className="font-semibold text-brand-navy">
-                  {l.commodity} — {l.quantity_munds} munds
+                  {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
                 </p>
                 <p className="text-sm text-slate-500 flex items-center gap-1.5">
                   <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}

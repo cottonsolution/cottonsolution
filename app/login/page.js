@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { LoginIcon, UserIcon, PhoneIcon, MailIcon, LockIcon, TruckIcon, WalletIcon } from "@/components/Icons";
+import { LoginIcon, UserIcon, PhoneIcon, MailIcon, LockIcon, TruckIcon, WalletIcon, BuildingIcon, MapPinIcon, IdCardIcon } from "@/components/Icons";
 
 const ROLE_REDIRECT = {
   admin: "/admin/dashboard",
@@ -20,6 +20,10 @@ export default function LoginPage() {
     email: "",
     password: "",
     role: "merchant",
+    companyName: "",
+    businessCity: "",
+    ntnNumber: "",
+    warehouseAddress: "",
   });
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -56,7 +60,17 @@ export default function LoginPage() {
       email: form.email,
       password: form.password,
       options: {
-        data: { full_name: form.fullName, phone: form.phone, role: form.role },
+        data: {
+          full_name: form.fullName,
+          phone: form.phone,
+          role: form.role,
+          ...(form.role === "merchant" && {
+            company_name: form.companyName,
+            business_city: form.businessCity,
+            ntn_number: form.ntnNumber,
+            warehouse_address: form.warehouseAddress,
+          }),
+        },
       },
     });
     setLoading(false);
@@ -159,6 +173,58 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
+              {form.role === "merchant" && (
+                <div className="space-y-5 border-t border-slate-100 pt-5">
+                  <div>
+                    <label className="field-label">
+                      <BuildingIcon className="w-4 h-4 text-brand-orange" /> Merchant / Company Name
+                    </label>
+                    <input
+                      required
+                      placeholder="e.g. Hasnain Corporation"
+                      value={form.companyName}
+                      onChange={(e) => update("companyName", e.target.value)}
+                      className="field-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">
+                      <MapPinIcon className="w-4 h-4 text-brand-orange" /> Business City / Location
+                    </label>
+                    <input
+                      required
+                      placeholder="e.g. Bahawalpur"
+                      value={form.businessCity}
+                      onChange={(e) => update("businessCity", e.target.value)}
+                      className="field-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">
+                      <IdCardIcon className="w-4 h-4 text-brand-orange" /> Business / NTN Number
+                    </label>
+                    <input
+                      placeholder="Optional"
+                      value={form.ntnNumber}
+                      onChange={(e) => update("ntnNumber", e.target.value)}
+                      className="field-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">
+                      <BuildingIcon className="w-4 h-4 text-brand-orange" /> Address / Warehouse Location
+                    </label>
+                    <input
+                      required
+                      placeholder="Godown / office address for pickup"
+                      value={form.warehouseAddress}
+                      onChange={(e) => update("warehouseAddress", e.target.value)}
+                      className="field-input"
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 

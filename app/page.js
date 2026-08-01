@@ -4,13 +4,14 @@ import { getServiceIcon } from "@/lib/serviceIcons";
 import {
   TruckIcon,
   TruckCheckIcon,
-  ComputerUserIcon,
-  PhoneCheckIcon,
   ShieldCheckIcon,
   ClockIcon,
   WalletIcon,
   StarIcon,
   ArrowRightIcon,
+  PostLoadIllustration,
+  DriverAcceptIllustration,
+  DeliveryIllustration,
 } from "@/components/Icons";
 
 async function getHomeData() {
@@ -70,8 +71,8 @@ const FALLBACK_STEPS = [
   },
 ];
 
-const STEP_ICONS = [ComputerUserIcon, PhoneCheckIcon, TruckCheckIcon];
-const STEP_BG = ["bg-sky-100 text-sky-700", "bg-sky-100 text-sky-700", "bg-green-100 text-green-700"];
+const STEP_ILLUSTRATIONS = [PostLoadIllustration, DriverAcceptIllustration, DeliveryIllustration];
+const STEP_BG = ["bg-sky-50", "bg-orange-50", "bg-emerald-50"];
 
 const TRUST_POINTS = [
   { icon: ShieldCheckIcon, title: "Verified Drivers", desc: "CNIC, licence & permit checked" },
@@ -167,13 +168,13 @@ export default async function HomePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 relative">
             {steps.map((step, i) => {
-              const Icon = STEP_ICONS[i % STEP_ICONS.length];
+              const Illustration = STEP_ILLUSTRATIONS[i % STEP_ILLUSTRATIONS.length];
               const bg = STEP_BG[i % STEP_BG.length];
               return (
                 <div key={step.id} className="text-center relative">
-                  <div className={`icon-badge-round mx-auto ${bg} mb-5 relative shadow-pop`}>
-                    <Icon className="w-9 h-9" />
-                    <span className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full bg-brand-orange text-white text-xs font-bold flex items-center justify-center border-2 border-white">
+                  <div className={`w-32 h-32 rounded-full mx-auto ${bg} mb-5 relative shadow-pop flex items-center justify-center`}>
+                    <Illustration className="w-24 h-24" />
+                    <span className="absolute -top-1 -right-1 w-8 h-8 rounded-full bg-brand-orange text-white text-sm font-bold flex items-center justify-center border-2 border-white shadow-sm">
                       {step.step_number}
                     </span>
                   </div>

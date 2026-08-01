@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
-import { HomeIcon, GridIcon, RouteIcon, BellIcon, ShieldCheckIcon } from "@/components/Icons";
+import { HomeIcon, GridIcon, RouteIcon, BellIcon, ShieldCheckIcon, TruckIcon, PlusIcon, TrashIcon } from "@/components/Icons";
 
 const TABS = [
   { label: "Home Content", icon: HomeIcon },
   { label: "Our Services", icon: GridIcon },
   { label: "How It Works", icon: RouteIcon },
+  { label: "Vehicle Types", icon: TruckIcon },
   { label: "Expiry Alerts", icon: BellIcon },
 ];
 
@@ -56,6 +57,7 @@ export default function AdminDashboardPage() {
       {activeTab === "Home Content" && <HomeContentManager />}
       {activeTab === "Our Services" && <ServicesManager />}
       {activeTab === "How It Works" && <StepsManager />}
+      {activeTab === "Vehicle Types" && <VehicleTypesManager />}
       {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
     </section>
   );
@@ -342,6 +344,116 @@ function StepRow({ step, isEditing, onEdit, onCancel, onSave, onDelete }) {
 }
 
 // ---------------------------------------------------------------------------
+// TAB 4: VEHICLE TYPES CMS (CRUD) — feeds the registration form dropdown
+// ---------------------------------------------------------------------------
+function VehicleTypesManager() {
+  const [types, setTypes] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    const { data } = await supabase.from("vehicle_types").select("*").order("sort_order");
+    setTypes(data ?? []);
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    setError("");
+    if (!draft.trim()) return;
+    const { error: insertError } = await supabase
+      .from("vehicle_types")
+      .insert({ name: draft.trim(), sort_order: types.length + 1 });
+    if (insertError) return setError(insertError.message);
+    setDraft("");
+    refresh();
+  }
+
+  async function handleUpdate(id, name) {
+    await supabase.from("vehicle_types").update({ name }).eq("id", id);
+    setEditingId(null);
+    refresh();
+  }
+
+  async function handleDelete(id) {
+    await supabase.from("vehicle_types").delete().eq("id", id);
+    refresh();
+  }
+
+  return (
+    <div className="space-y-8">
+      <p className="text-sm text-slate-500 -mt-2">
+        These categories populate the <strong>Vehicle Type</strong> dropdown on the driver
+        registration form automatically — add, rename, or remove them anytime.
+      </p>
+
+      <form onSubmit={handleAdd} className="card flex flex-col sm:flex-row gap-4 sm:items-end">
+        <div className="flex-1">
+          <label className="text-sm font-medium text-slate-700">New Vehicle Type</label>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. 14 Wheeler"
+            className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+          />
+        </div>
+        <button type="submit" className="btn-orange h-fit">
+          <PlusIcon className="w-4 h-4" /> Add Type
+        </button>
+      </form>
+      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {types.map((t) => (
+          <VehicleTypeRow
+            key={t.id}
+            type={t}
+            isEditing={editingId === t.id}
+            onEdit={() => setEditingId(t.id)}
+            onCancel={() => setEditingId(null)}
+            onSave={(name) => handleUpdate(t.id, name)}
+            onDelete={() => handleDelete(t.id)}
+          />
+        ))}
+        {types.length === 0 && <p className="text-slate-400 text-sm">No vehicle types yet — add one above.</p>}
+      </div>
+    </div>
+  );
+}
+
+function VehicleTypeRow({ type, isEditing, onEdit, onCancel, onSave, onDelete }) {
+  const [name, setName] = useState(type.name);
+
+  if (isEditing) {
+    return (
+      <div className="card flex items-center gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+        <button onClick={() => onSave(name)} className="btn-orange px-3 py-2 text-sm">Save</button>
+        <button onClick={onCancel} className="px-3 py-2 text-sm border border-slate-300 rounded-lg">Cancel</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-10 h-10 rounded-lg">
+          <TruckIcon className="w-5 h-5" />
+        </span>
+        <p className="font-semibold text-brand-navy text-sm">{type.name}</p>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <button onClick={onEdit} className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg">Edit</button>
+        <button onClick={onDelete} className="px-2.5 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg">
+          <TrashIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // TAB 4: DOCUMENT EXPIRY ALERTS
 // ---------------------------------------------------------------------------
 function ExpiryAlerts() {
@@ -372,7 +484,9 @@ function ExpiryAlerts() {
       {alerts.map((v) => (
         <div key={v.vehicle_no} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="font-semibold text-brand-navy">{v.vehicle_no} — {v.driver_name}</p>
+            <p className="font-semibold text-brand-navy">
+              {v.vehicle_no} — {v.driver_name} {v.vehicle_type && <span className="text-slate-400 font-normal">({v.vehicle_type})</span>}
+            </p>
             <p className="text-sm text-slate-500">Mobile: {v.mobile_no}</p>
           </div>
           <div className="flex flex-wrap gap-3 text-xs">

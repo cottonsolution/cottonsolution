@@ -20,6 +20,7 @@ function StatusBadge({ status }) {
 
 const RESULT_FIELDS = [
   { key: "vehicle_no", label: "Vehicle No", icon: TruckIcon },
+  { key: "vehicle_type", label: "Vehicle Type", icon: TruckIcon },
   { key: "mobile_no", label: "Mobile No", icon: PhoneIcon },
 ];
 
@@ -87,7 +88,7 @@ export default function VehicleSearch() {
               <p className="text-xs text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                 <f.icon className="w-3.5 h-3.5" /> {f.label}
               </p>
-              <p className="font-semibold text-brand-navy">{result[f.key]}</p>
+              <p className="font-semibold text-brand-navy">{result[f.key] || "—"}</p>
             </div>
           ))}
 

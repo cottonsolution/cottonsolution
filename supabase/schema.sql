@@ -10,23 +10,32 @@ create extension if not exists "pgcrypto";
 -- 1. PROFILES  (extends built-in auth.users with role + contact info)
 -- ----------------------------------------------------------------------------
 create table if not exists public.profiles (
-  id            uuid primary key references auth.users (id) on delete cascade,
-  full_name     text not null,
-  phone         text,
-  role          text not null check (role in ('admin', 'merchant', 'driver')),
-  created_at    timestamptz default now()
+  id                  uuid primary key references auth.users (id) on delete cascade,
+  full_name           text not null,        -- doubles as "Owner / Representative Name" for merchants
+  phone               text,
+  role                text not null check (role in ('admin', 'merchant', 'driver')),
+  -- Merchant business profile fields (null for driver/admin accounts)
+  company_name        text,                 -- Merchant / Company Name
+  business_city       text,                 -- Business City / Location
+  ntn_number          text,                 -- Business / NTN Number
+  warehouse_address   text,                 -- Address / Warehouse Location
+  created_at          timestamptz default now()
 );
 
 -- Auto-create a profile row whenever a new auth user signs up
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, full_name, phone, role)
+  insert into public.profiles (id, full_name, phone, role, company_name, business_city, ntn_number, warehouse_address)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', 'New User'),
     new.raw_user_meta_data->>'phone',
-    coalesce(new.raw_user_meta_data->>'role', 'merchant')
+    coalesce(new.raw_user_meta_data->>'role', 'merchant'),
+    new.raw_user_meta_data->>'company_name',
+    new.raw_user_meta_data->>'business_city',
+    new.raw_user_meta_data->>'ntn_number',
+    new.raw_user_meta_data->>'warehouse_address'
   );
   return new;
 end;
@@ -73,20 +82,43 @@ create table if not exists public.how_it_works_steps (
 );
 
 -- ----------------------------------------------------------------------------
+-- 4b. VEHICLE TYPES  (Admin CMS — populates the registration form dropdown)
+-- ----------------------------------------------------------------------------
+create table if not exists public.vehicle_types (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null unique,   -- e.g. "6 Wheeler", "10 Wheeler", "Mazda"
+  sort_order    int default 0,
+  created_at    timestamptz default now()
+);
+
+insert into public.vehicle_types (name, sort_order) values
+  ('Mazda', 1),
+  ('6 Wheeler', 2),
+  ('10 Wheeler', 3),
+  ('18 Wheeler (Trailer)', 4),
+  ('22 Wheeler (Trailer)', 5)
+on conflict (name) do nothing;
+
+-- ----------------------------------------------------------------------------
 -- 5. VEHICLES  (Driver & Vehicle Registration + Vehicle Verification Portal)
 -- ----------------------------------------------------------------------------
 create table if not exists public.vehicles (
   id                  uuid primary key default gen_random_uuid(),
   driver_id           uuid references public.profiles (id) on delete set null,
+  vehicle_type_id     uuid references public.vehicle_types (id),
+  vehicle_type        text,             -- denormalised label, kept even if the type is later renamed/deleted
   vehicle_no          text unique not null,
   mobile_no           text not null,
   driver_name         text not null,
   cnic_no             text not null,
   cnic_expiry         date not null,
+  cnic_image_url      text,             -- Supabase Storage path (bucket: "driver-documents")
   license_no          text not null,
   license_expiry      date not null,
+  license_image_url   text,
   permit_no           text not null,
   permit_expiry       date not null,
+  permit_image_url    text,
   status              text default 'active' check (status in ('active', 'suspended')),
   created_at          timestamptz default now()
 );
@@ -98,6 +130,7 @@ create index if not exists idx_vehicles_vehicle_no on public.vehicles (vehicle_n
 create or replace view public.vehicle_verification_view as
 select
   vehicle_no,
+  vehicle_type,
   mobile_no,
   driver_name,
   cnic_no,
@@ -124,11 +157,13 @@ from public.vehicles;
 create table if not exists public.loads (
   id                  uuid primary key default gen_random_uuid(),
   merchant_id         uuid not null references public.profiles (id) on delete cascade,
-  commodity           text not null check (commodity in ('Cotton', 'Wheat', 'Rapeseed')),
-  quantity_munds      numeric not null check (quantity_munds > 0),
+  commodity           text not null check (commodity in ('Cotton', 'Wheat', 'Rapeseed', 'Maize', 'Rice', 'Sugarcane', 'Other')),
+  quantity_munds      numeric not null check (quantity_munds > 0),  -- kept for backward compatibility (always stored in munds)
+  quantity_value       numeric,          -- raw value as entered by the merchant
+  quantity_unit        text default 'Munds' check (quantity_unit in ('Munds', 'Tons')),
   pickup_location     text not null,
   dropoff_location    text not null,
-  offered_rate        numeric,
+  offered_rate        numeric,          -- Target Freight Rate (PKR)
   status              text default 'open' check (status in ('open', 'assigned', 'in_transit', 'delivered', 'cancelled')),
   assigned_vehicle_id uuid references public.vehicles (id),
   created_at          timestamptz default now()
@@ -182,6 +217,7 @@ alter table public.profiles enable row level security;
 alter table public.site_content enable row level security;
 alter table public.services enable row level security;
 alter table public.how_it_works_steps enable row level security;
+alter table public.vehicle_types enable row level security;
 alter table public.vehicles enable row level security;
 alter table public.loads enable row level security;
 alter table public.bids enable row level security;
@@ -216,6 +252,11 @@ create policy "services_admin_write" on public.services
 create policy "steps_public_read" on public.how_it_works_steps
   for select using (true);
 create policy "steps_admin_write" on public.how_it_works_steps
+  for all using (public.is_admin()) with check (public.is_admin());
+
+create policy "vehicle_types_public_read" on public.vehicle_types
+  for select using (true);
+create policy "vehicle_types_admin_write" on public.vehicle_types
   for all using (public.is_admin()) with check (public.is_admin());
 
 -- Vehicles: public can read only via the verification view (granted below);
@@ -257,6 +298,32 @@ create policy "biltys_read" on public.biltys
       join public.vehicles v on v.id = l.assigned_vehicle_id
       where l.id = load_id and (l.merchant_id = auth.uid() or v.driver_id = auth.uid())
     ) or public.is_admin()
+  );
+
+-- ============================================================================
+-- STORAGE — bucket for CNIC / Licence / Route Permit document images
+-- ============================================================================
+insert into storage.buckets (id, name, public)
+values ('driver-documents', 'driver-documents', true)
+on conflict (id) do nothing;
+
+-- Any signed-in user (a driver registering their vehicle) can upload into
+-- their own folder; admins can manage everything; files are publicly
+-- readable so the uploaded image URL can be shown back in the form/admin UI.
+create policy "driver_documents_public_read" on storage.objects
+  for select using (bucket_id = 'driver-documents');
+
+create policy "driver_documents_authenticated_upload" on storage.objects
+  for insert with check (bucket_id = 'driver-documents' and auth.role() = 'authenticated');
+
+create policy "driver_documents_owner_or_admin_modify" on storage.objects
+  for update using (
+    bucket_id = 'driver-documents' and (owner = auth.uid() or public.is_admin())
+  );
+
+create policy "driver_documents_owner_or_admin_delete" on storage.objects
+  for delete using (
+    bucket_id = 'driver-documents' and (owner = auth.uid() or public.is_admin())
   );
 
 -- ============================================================================

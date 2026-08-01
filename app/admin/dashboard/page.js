@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
+import DashboardLayout from "@/components/DashboardLayout";
 import { HomeIcon, GridIcon, RouteIcon, BellIcon, ShieldCheckIcon, TruckIcon, PlusIcon, TrashIcon } from "@/components/Icons";
 
 const TABS = [
@@ -28,38 +29,21 @@ export default function AdminDashboardPage() {
   if (loading || !user || profile?.role !== "admin") return null;
 
   return (
-    <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex items-center gap-3 mb-1">
-        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
-          <ShieldCheckIcon className="w-6 h-6" />
-        </span>
-        <h1 className="text-3xl font-bold text-brand-navy">Admin Dashboard</h1>
-      </div>
-      <p className="text-slate-500 mb-8">Manage website content and monitor document compliance.</p>
-
-      <div className="flex gap-2 mb-8 border-b border-slate-200 overflow-x-auto">
-        {TABS.map((tab) => (
-          <button
-            key={tab.label}
-            onClick={() => setActiveTab(tab.label)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              activeTab === tab.label
-                ? "border-brand-orange text-brand-navy"
-                : "border-transparent text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
+    <DashboardLayout
+      roleLabel="Admin"
+      title="Admin Dashboard"
+      subtitle="Manage website content and monitor document compliance."
+      titleIcon={ShieldCheckIcon}
+      navItems={TABS}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
       {activeTab === "Home Content" && <HomeContentManager />}
       {activeTab === "Our Services" && <ServicesManager />}
       {activeTab === "How It Works" && <StepsManager />}
       {activeTab === "Vehicle Types" && <VehicleTypesManager />}
       {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
-    </section>
+    </DashboardLayout>
   );
 }
 

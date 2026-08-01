@@ -449,6 +449,15 @@ export function BuildingIcon({ className }) {
   );
 }
 
+export function EyeIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M1.5 12s3.75-7 10.5-7 10.5 7 10.5 7-3.75 7-10.5 7-10.5-7-10.5-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 export function TrashIcon({ className }) {
   return (
     <svg className={className} {...base}>

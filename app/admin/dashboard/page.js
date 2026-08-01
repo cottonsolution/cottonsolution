@@ -19,6 +19,7 @@ import {
   CloseIcon,
   LogoutIcon,
   ImageIcon,
+  EyeIcon,
 } from "@/components/Icons";
 
 // Each tab gets its own gradient (via CSS vars) so the sidebar icon tiles
@@ -366,6 +367,7 @@ function HeroSlidesManager() {
 
 function SlideRow({ slide, isEditing, onEdit, onCancel, onSave, onDelete }) {
   const [caption, setCaption] = useState(slide.caption ?? "");
+  const [viewing, setViewing] = useState(false);
 
   return (
     <div className="flex items-center gap-3">
@@ -392,6 +394,9 @@ function SlideRow({ slide, isEditing, onEdit, onCancel, onSave, onDelete }) {
           </>
         ) : (
           <>
+            <button onClick={() => setViewing(true)} className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg" aria-label="View slide">
+              <EyeIcon className="w-3.5 h-3.5" />
+            </button>
             <button onClick={onEdit} className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg">Edit</button>
             <button onClick={onDelete} className="px-2 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg">
               <TrashIcon className="w-3.5 h-3.5" />
@@ -399,6 +404,31 @@ function SlideRow({ slide, isEditing, onEdit, onCancel, onSave, onDelete }) {
           </>
         )}
       </div>
+
+      {viewing && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setViewing(false)}
+        >
+          <div className="relative max-w-3xl w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setViewing(false)}
+              className="absolute -top-10 right-0 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-brand-navy"
+              aria-label="Close preview"
+            >
+              <CloseIcon className="w-4 h-4" />
+            </button>
+            <div className="rounded-2xl overflow-hidden bg-black">
+              {slide.media_type === "video" ? (
+                <video src={slide.media_url} className="w-full max-h-[80vh] object-contain" controls autoPlay />
+              ) : (
+                <img src={slide.media_url} alt={slide.caption ?? "slide"} className="w-full max-h-[80vh] object-contain" />
+              )}
+            </div>
+            {slide.caption && <p className="text-white text-sm text-center mt-3">{slide.caption}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

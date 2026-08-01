@@ -15,6 +15,14 @@ import {
   DeliveryIllustration,
 } from "@/components/Icons";
 
+// Home page content (heading, services, steps, hero slides) is managed live
+// from the Admin Dashboard. Without this, Next.js caches the page at build
+// time and new/edited/deleted content (e.g. hero slides) never appears on
+// the live site until a full rebuild — this forces a fresh fetch on every
+// request so admin changes show up immediately.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 async function getHomeData() {
   try {
     const [{ data: content }, { data: services }, { data: steps }, { data: slides }] = await Promise.all([

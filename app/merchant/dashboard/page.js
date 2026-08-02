@@ -20,21 +20,30 @@ import {
   UserIcon,
   PhoneIcon,
   CrosshairIcon,
+  MenuIcon,
+  CloseIcon,
+  LogoutIcon,
+  RadarIcon,
 } from "@/components/Icons";
 
 const COMMODITIES = ["Cotton", "Wheat", "Rapeseed", "Maize", "Rice", "Sugarcane", "Other"];
 const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIcon, Maize: WheatIcon, Rice: WheatIcon, Sugarcane: WheatIcon, Other: TruckIcon };
+
+// Each tab gets its own gradient tile — same "semi-realistic" sidebar
+// pattern used across Admin and Driver dashboards, so all three portals
+// feel like one consistent product.
 const TABS = [
-  { label: "Post a Load", icon: PlusIcon },
-  { label: "Active Shipments", icon: ChartIcon },
-  { label: "Verify a Vehicle", icon: ShieldCheckIcon },
-  { label: "My Profile", icon: BuildingIcon },
+  { label: "Post a Load", icon: PlusIcon, from: "#fb923c", to: "#c2410c" },
+  { label: "Active Shipments", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
+  { label: "Verify a Vehicle", icon: ShieldCheckIcon, from: "#4ade80", to: "#15803d" },
+  { label: "My Profile", icon: BuildingIcon, from: "#a78bfa", to: "#6d28d9" },
 ];
 
 export default function MerchantDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "merchant")) {
@@ -42,39 +51,115 @@ export default function MerchantDashboardPage() {
     }
   }, [loading, user, profile, router]);
 
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
   if (loading || !user || profile?.role !== "merchant") return null;
 
+  const activeMeta = TABS.find((t) => t.label === activeTab);
+
   return (
-    <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex items-center gap-3 mb-1">
-        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
-          <TruckIcon className="w-6 h-6" />
-        </span>
-        <h1 className="text-3xl font-bold text-brand-navy">Merchant Dashboard</h1>
-      </div>
-      <p className="text-slate-500 mb-8">Post loads, track shipments, and verify vehicles before dispatch.</p>
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <span className="icon-tile w-12 h-12" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
+            <TruckIcon className="w-6 h-6 text-white" />
+          </span>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-brand-navy leading-tight">Merchant Dashboard</h1>
+            <p className="text-slate-500 text-sm hidden sm:block">Post loads, track shipments, and verify vehicles before dispatch.</p>
+          </div>
+        </div>
 
-      <div className="flex gap-2 mb-8 border-b border-slate-200 overflow-x-auto">
-        {TABS.map((tab) => (
-          <button
-            key={tab.label}
-            onClick={() => setActiveTab(tab.label)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              activeTab === tab.label
-                ? "border-brand-orange text-brand-navy"
-                : "border-transparent text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
+        <button
+          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open menu"
+        >
+          <MenuIcon className="w-5 h-5" />
+        </button>
       </div>
 
-      {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
-      {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} />}
-      {activeTab === "Verify a Vehicle" && <VehicleSearch />}
-      {activeTab === "My Profile" && <MerchantProfile userId={user.id} initialProfile={profile} />}
+      <div className="flex gap-6 items-start">
+        {/* DESKTOP SIDEBAR — same structure as Admin/Driver dashboards */}
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white rounded-2xl shadow-card p-3 sticky top-24 gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.label}
+              onClick={() => setActiveTab(tab.label)}
+              className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
+            >
+              <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+                <tab.icon className="w-5 h-5 text-white" />
+              </span>
+              {tab.label}
+            </button>
+          ))}
+          <div className="border-t border-slate-100 mt-2 pt-2">
+            <button onClick={handleLogout} className="admin-sidebar-link text-red-500 hover:bg-red-50 w-full">
+              <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+                <LogoutIcon className="w-5 h-5 text-white" />
+              </span>
+              Logout
+            </button>
+          </div>
+        </aside>
+
+        {/* MOBILE DRAWER */}
+        {drawerOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+            <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl p-4 flex flex-col gap-1 animate-[slideIn_0.25s_ease-out]">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-bold text-brand-navy">Menu</span>
+                <button onClick={() => setDrawerOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400">
+                  <CloseIcon className="w-5 h-5" />
+                </button>
+              </div>
+              {TABS.map((tab) => (
+                <button
+                  key={tab.label}
+                  onClick={() => {
+                    setActiveTab(tab.label);
+                    setDrawerOpen(false);
+                  }}
+                  className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
+                >
+                  <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+                    <tab.icon className="w-5 h-5 text-white" />
+                  </span>
+                  {tab.label}
+                </button>
+              ))}
+              <div className="border-t border-slate-100 mt-2 pt-2">
+                <button onClick={handleLogout} className="admin-sidebar-link text-red-500 w-full">
+                  <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+                    <LogoutIcon className="w-5 h-5 text-white" />
+                  </span>
+                  Logout
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* CONTENT */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-6 lg:hidden overflow-x-auto pb-1">
+            <span className="icon-tile w-9 h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
+              <activeMeta.icon className="w-4 h-4 text-white" />
+            </span>
+            <h2 className="font-bold text-brand-navy whitespace-nowrap">{activeTab}</h2>
+          </div>
+
+          {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
+          {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} />}
+          {activeTab === "Verify a Vehicle" && <VehicleSearch />}
+          {activeTab === "My Profile" && <MerchantProfile userId={user.id} initialProfile={profile} />}
+        </div>
+      </div>
     </section>
   );
 }
@@ -96,6 +181,7 @@ function PostLoad({ merchantId }) {
   const [locateError, setLocateError] = useState("");
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [success, setSuccess] = useState(false);
+  const [wasLiveConnected, setWasLiveConnected] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -143,6 +229,7 @@ function PostLoad({ merchantId }) {
     });
     if (insertError) return setError(insertError.message);
     setSuccess(true);
+    setWasLiveConnected(!!pickupCoords);
     setPickupCoords(null);
     setForm({ commodity: "Cotton", quantity_value: "", quantity_unit: "Munds", pickup_location: "", dropoff_location: "", offered_rate: "", vehicle_type_needed: "" });
   }
@@ -152,11 +239,25 @@ function PostLoad({ merchantId }) {
   return (
     <form onSubmit={handleSubmit} className="card max-w-xl space-y-5">
       {success && (
-        <p className="text-green-700 text-sm flex items-center gap-2">
-          <TruckIcon className="w-4 h-4 shrink-0" /> Load posted — visible to drivers now.
+        <p className="text-green-700 text-sm flex items-center gap-2 bg-green-50 rounded-lg px-3 py-2">
+          <TruckIcon className="w-4 h-4 shrink-0" />
+          {wasLiveConnected
+            ? "Load posted — nearby matching drivers are being alerted right now."
+            : "Load posted and visible under Available Loads. Tip: pin a pickup location next time for instant driver alerts."}
         </p>
       )}
       {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start gap-3">
+        <span className="icon-badge bg-blue-500/10 text-blue-600 w-9 h-9 rounded-lg shrink-0">
+          <RadarIcon className="w-4 h-4" />
+        </span>
+        <p className="text-xs text-blue-900 leading-relaxed">
+          <span className="font-semibold">Live-connected to the Driver App:</span> when you pin a pickup
+          location and truck type below, any driver in &quot;Find Loads&quot; mode nearby with a matching
+          truck gets an instant ringing alert for this load — no manual searching needed on their end.
+        </p>
+      </div>
 
       <div>
         <label className="field-label">
@@ -244,10 +345,14 @@ function PostLoad({ merchantId }) {
             type="button"
             onClick={useMyLocation}
             disabled={locating}
-            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-orange disabled:opacity-50"
+            className={`mt-2 w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl border-2 transition-colors disabled:opacity-50 ${
+              pickupCoords
+                ? "border-green-500 bg-green-50 text-green-700"
+                : "border-brand-orange/40 text-brand-orange hover:bg-brand-orangeSoft"
+            }`}
           >
-            <CrosshairIcon className="w-3.5 h-3.5" />
-            {locating ? "Locating…" : pickupCoords ? "Location pinned ✓" : "Pin pickup on the map (uses your current location)"}
+            <CrosshairIcon className="w-4 h-4" />
+            {locating ? "Locating…" : pickupCoords ? "Location pinned — drivers will be alerted" : "Pin Pickup Location (for live driver alerts)"}
           </button>
           {locateError && <p className="text-xs text-red-500 mt-1">{locateError}</p>}
         </div>

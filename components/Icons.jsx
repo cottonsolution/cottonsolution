@@ -189,6 +189,15 @@ export function WhatsAppIcon({ className }) {
   );
 }
 
+export function CheckCircleIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.3 12.3l2.4 2.4 5-5.4" />
+    </svg>
+  );
+}
+
 export function IdCardIcon({ className }) {
   return (
     <svg className={className} {...base}>

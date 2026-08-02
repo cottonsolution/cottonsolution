@@ -21,6 +21,8 @@ import {
   MoonIcon,
   RadarIcon,
   MapPinIcon,
+  IdCardIcon,
+  CheckCircleIcon,
 } from "@/components/Icons";
 import ModeSwitcher from "@/components/driver/ModeSwitcher";
 import WorkTaskBar from "@/components/driver/WorkTaskBar";
@@ -36,6 +38,7 @@ const TABS = [
   { label: "Dashboard", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
   { label: "Available Loads", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
   { label: "My Trips", icon: RouteIcon, from: "#4ade80", to: "#15803d" },
+  { label: "My Truck", icon: IdCardIcon, from: "#fb923c", to: "#c2410c" },
 ];
 
 export default function DriverDashboardPage() {
@@ -296,6 +299,7 @@ export default function DriverDashboardPage() {
           )}
           {activeTab === "Available Loads" && <AvailableLoads driverId={user.id} vehicle={myVehicle} onAccepted={refreshWorkLoads} />}
           {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} onAdvance={advanceLoadStatus} />}
+          {activeTab === "My Truck" && <TruckProfile vehicle={myVehicle} onUpdated={refreshVehicle} />}
         </div>
       </div>
     </section>
@@ -376,9 +380,16 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
 
   async function refresh() {
     const { data } = await supabase.from("loads").select("*").eq("status", "open").order("created_at", { ascending: false });
-    setLoads(data ?? []);
+    const rows = data ?? [];
+    // Loads that match this driver's registered truck type bubble to the top.
+    rows.sort((a, b) => {
+      const aMatch = vehicle?.vehicle_type && a.vehicle_type_needed === vehicle.vehicle_type ? 0 : 1;
+      const bMatch = vehicle?.vehicle_type && b.vehicle_type_needed === vehicle.vehicle_type ? 0 : 1;
+      return aMatch - bMatch;
+    });
+    setLoads(rows);
   }
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); }, [vehicle]);
 
   async function placeBid(load, accept) {
     if (!vehicle) return setMessage("Register your vehicle before bidding.");
@@ -414,14 +425,28 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
           <GridIcon className="w-4 h-4" /> No open loads right now — check back soon.
         </p>
       )}
-      {loads.map((l) => (
-        <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {loads.map((l) => {
+        const isMatch = vehicle?.vehicle_type && l.vehicle_type_needed === vehicle.vehicle_type;
+        return (
+        <div key={l.id} className={`card flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isMatch ? "border-2 border-green-400" : ""}`}>
           <div className="flex items-center gap-3">
             <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
               <TruckIcon className="w-5 h-5" />
             </span>
             <div>
-              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}</p>
+              <p className="font-semibold text-brand-navy flex items-center gap-2 flex-wrap">
+                {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
+                {isMatch && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                    <CheckCircleIcon className="w-3 h-3" /> Matches your truck
+                  </span>
+                )}
+                {l.vehicle_type_needed && !isMatch && (
+                  <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                    Needs: {l.vehicle_type_needed}
+                  </span>
+                )}
+              </p>
               <p className="text-sm text-slate-500 flex items-center gap-1.5">
                 <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
               </p>
@@ -448,7 +473,110 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
             </button>
           </div>
         </div>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+function TruckProfile({ vehicle, onUpdated }) {
+  const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [selectedTypeId, setSelectedTypeId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    supabase.from("vehicle_types").select("*").order("sort_order").then(({ data }) => setVehicleTypes(data ?? []));
+  }, []);
+
+  useEffect(() => {
+    if (vehicle?.vehicle_type_id) setSelectedTypeId(vehicle.vehicle_type_id);
+  }, [vehicle]);
+
+  if (!vehicle) {
+    return (
+      <div className="card text-center py-12">
+        <IdCardIcon className="w-10 h-10 text-brand-orange mx-auto mb-3" />
+        <p className="font-semibold text-brand-navy mb-1">No truck registered yet</p>
+        <p className="text-sm text-slate-500 mb-4">Register your vehicle to set up your truck profile.</p>
+        <a href="/register" className="btn-orange inline-flex">Register Now</a>
+      </div>
+    );
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    const type = vehicleTypes.find((t) => t.id === selectedTypeId);
+    const { error: updateError } = await supabase
+      .from("vehicles")
+      .update({ vehicle_type_id: selectedTypeId || null, vehicle_type: type?.name ?? null })
+      .eq("id", vehicle.id);
+    setSaving(false);
+    if (updateError) return setError(updateError.message);
+    setSaved(true);
+    await onUpdated?.();
+  }
+
+  return (
+    <div className="space-y-6 max-w-xl">
+      <div className="card space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="icon-badge bg-brand-orange/10 text-brand-orange w-9 h-9 rounded-lg"><TruckIcon className="w-4 h-4" /></span>
+          <h3 className="font-bold text-brand-navy">My Truck Profile</h3>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
+          <VehicleDetail icon={TruckIcon} label="Vehicle No" value={vehicle.vehicle_no} />
+          <VehicleDetail icon={ShieldCheckIcon} label="Status" value={vehicle.status} />
+          <VehicleDetail icon={IdCardIcon} label="Driver Name" value={vehicle.driver_name} />
+          <VehicleDetail icon={MapPinIcon} label="Mobile No" value={vehicle.mobile_no} />
+        </div>
+
+        <div className="border-t border-slate-100 pt-4">
+          <label className="field-label">
+            <TruckIcon className="w-4 h-4 text-brand-orange" /> Vehicle Type
+          </label>
+          <p className="text-xs text-slate-400 mb-2">
+            Keep this accurate — merchants pick a required truck type when posting a load, and you&apos;ll only
+            get instant alerts for loads that match what you select here.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select
+              value={selectedTypeId}
+              onChange={(e) => setSelectedTypeId(e.target.value)}
+              className="field-input flex-1"
+            >
+              <option value="">Not set</option>
+              {vehicleTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <button onClick={handleSave} disabled={saving} className="btn-orange shrink-0">
+              {saving ? "Saving..." : "Save Truck Type"}
+            </button>
+          </div>
+          {saved && (
+            <p className="text-green-700 text-sm mt-2 flex items-center gap-1.5">
+              <CheckCircleIcon className="w-4 h-4" /> Truck type updated.
+            </p>
+          )}
+          {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VehicleDetail({ icon: Icon, label, value }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] text-slate-400 uppercase tracking-wide flex items-center gap-1">
+        <Icon className="w-3 h-3" /> {label}
+      </p>
+      <p className="text-sm font-semibold text-brand-navy truncate capitalize">{value || "—"}</p>
     </div>
   );
 }

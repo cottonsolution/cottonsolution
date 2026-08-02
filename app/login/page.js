@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseBrowserClient";
 import { LoginIcon, UserIcon, PhoneIcon, MailIcon, LockIcon, TruckIcon, WalletIcon, BuildingIcon, MapPinIcon, IdCardIcon } from "@/components/Icons";
 
 const ROLE_REDIRECT = {

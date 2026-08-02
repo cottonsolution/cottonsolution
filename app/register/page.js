@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseBrowserClient";
 import { useUser } from "@/lib/useUser";
 import { uploadDriverDocument } from "@/lib/uploadDocument";
 import {

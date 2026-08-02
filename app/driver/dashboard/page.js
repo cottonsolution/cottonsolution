@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseBrowserClient";
 import { useUser } from "@/lib/useUser";
 import { useLiveLocation } from "@/lib/useLiveLocation";
 import { haversineKm } from "@/lib/distance";

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseBrowserClient";
 import { useUser } from "@/lib/useUser";
 import VehicleSearch from "@/components/VehicleSearch";
 import LocationAutocomplete from "@/components/LocationAutocomplete";

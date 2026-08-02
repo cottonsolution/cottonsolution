@@ -337,6 +337,14 @@ create policy "loads_merchant_all" on public.loads
 create policy "loads_driver_read_open" on public.loads
   for select using (status = 'open' or merchant_id = auth.uid() or public.is_admin());
 
+-- Drivers must also be able to READ a load once it's no longer "open" (i.e.
+-- after they've accepted it) — otherwise My Trips / the Work Mode tracking
+-- bar shows nothing even though the accept itself succeeded.
+create policy "loads_driver_read_assigned" on public.loads
+  for select using (
+    assigned_vehicle_id in (select id from public.vehicles where driver_id = auth.uid())
+  );
+
 -- Drivers can (a) accept an "open" load, and (b) progress the 8-step trip
 -- tracker on a load already assigned to one of their own vehicles — but can
 -- never set assigned_vehicle_id to a vehicle they don't own (no hijacking

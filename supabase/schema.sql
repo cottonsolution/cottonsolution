@@ -337,6 +337,21 @@ create policy "loads_merchant_all" on public.loads
 create policy "loads_driver_read_open" on public.loads
   for select using (status = 'open' or merchant_id = auth.uid() or public.is_admin());
 
+-- Drivers can (a) accept an "open" load, and (b) progress the 8-step trip
+-- tracker on a load already assigned to one of their own vehicles — but can
+-- never set assigned_vehicle_id to a vehicle they don't own (no hijacking
+-- another driver's load). Without this, "Accept" silently does nothing
+-- because RLS blocks the write with no error.
+create policy "loads_driver_accept_and_progress" on public.loads
+  for update
+  using (
+    status = 'open'
+    or assigned_vehicle_id in (select id from public.vehicles where driver_id = auth.uid())
+  )
+  with check (
+    assigned_vehicle_id in (select id from public.vehicles where driver_id = auth.uid())
+  );
+
 -- Bids: drivers manage their own bids; merchants read bids on their loads
 create policy "bids_driver_all" on public.bids
   for all using (driver_id = auth.uid() or public.is_admin())

@@ -98,10 +98,11 @@ export default function DriverDashboardPage() {
   useEffect(() => { refreshWorkLoads(); }, [myVehicle]);
 
   async function advanceTripStage(load, nextStage) {
-    await supabase
+    const { error: stageError } = await supabase
       .from("loads")
       .update({ trip_stage: nextStage, status: statusForStage(nextStage) })
       .eq("id", load.id);
+    if (stageError) alert(`Could not update trip status: ${stageError.message}`);
     await refreshWorkLoads();
   }
 
@@ -160,7 +161,25 @@ export default function DriverDashboardPage() {
       bid_amount: load.offered_rate ?? 0,
       status: "accepted",
     });
-    await supabase.from("loads").update({ status: "assigned", trip_stage: 1, assigned_vehicle_id: myVehicle.id }).eq("id", load.id);
+    const { data: updated, error: acceptError } = await supabase
+      .from("loads")
+      .update({ status: "assigned", trip_stage: 1, assigned_vehicle_id: myVehicle.id })
+      .eq("id", load.id)
+      .eq("status", "open") // guard: don't steal a load another driver just accepted
+      .select()
+      .maybeSingle();
+
+    if (acceptError || !updated) {
+      // Either a DB/permissions error, or someone else accepted it first.
+      alert(
+        acceptError
+          ? `Could not accept this load: ${acceptError.message}`
+          : "This load was just accepted by another driver."
+      );
+      setAlertLoad(null);
+      return;
+    }
+
     setNearbyLoads((prev) => prev.filter((l) => l.id !== load.id));
     setAlertLoad(null);
     await refreshWorkLoads();
@@ -417,7 +436,24 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
     });
 
     if (accept) {
-      await supabase.from("loads").update({ status: "assigned", trip_stage: 1, assigned_vehicle_id: vehicle.id }).eq("id", load.id);
+      const { data: updated, error: acceptError } = await supabase
+        .from("loads")
+        .update({ status: "assigned", trip_stage: 1, assigned_vehicle_id: vehicle.id })
+        .eq("id", load.id)
+        .eq("status", "open") // guard: don't steal a load another driver just accepted
+        .select()
+        .maybeSingle();
+
+      if (acceptError || !updated) {
+        setMessage(
+          acceptError
+            ? `Could not accept this load: ${acceptError.message}`
+            : "This load was just accepted by another driver."
+        );
+        refresh();
+        return;
+      }
+
       setMessage(`Load accepted at PKR ${amount}. A digital bilty has been generated.`);
       refresh();
       onAccepted?.();

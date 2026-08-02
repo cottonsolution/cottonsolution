@@ -23,7 +23,6 @@ import {
   UserIcon,
   PhoneIcon,
   CrosshairIcon,
-  MenuIcon,
   CloseIcon,
   LogoutIcon,
   RadarIcon,
@@ -44,17 +43,16 @@ const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIc
 // pattern used across Admin and Driver dashboards, so all three portals
 // feel like one consistent product.
 const TABS = [
-  { label: "Post a Load", icon: PlusIcon, from: "#fb923c", to: "#c2410c" },
-  { label: "Active Shipments", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
-  { label: "Verify a Vehicle", icon: ShieldCheckIcon, from: "#4ade80", to: "#15803d" },
-  { label: "My Profile", icon: BuildingIcon, from: "#a78bfa", to: "#6d28d9" },
+  { label: "Post a Load", short: "Post Load", icon: PlusIcon, from: "#fb923c", to: "#c2410c" },
+  { label: "Active Shipments", short: "Shipments", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
+  { label: "Verify a Vehicle", short: "Verify", icon: ShieldCheckIcon, from: "#4ade80", to: "#15803d" },
+  { label: "My Profile", short: "Profile", icon: BuildingIcon, from: "#a78bfa", to: "#6d28d9" },
 ];
 
 export default function MerchantDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "merchant")) {
@@ -72,24 +70,26 @@ export default function MerchantDashboardPage() {
   const activeMeta = TABS.find((t) => t.label === activeTab);
 
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <span className="icon-tile w-12 h-12" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
-            <TruckIcon className="w-6 h-6 text-white" />
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 pb-24 lg:pb-12">
+      <div className="flex items-center justify-between gap-3 mb-4 sm:mb-8">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="icon-tile w-10 h-10 sm:w-12 sm:h-12 shrink-0" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
+            <TruckIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
           </span>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-brand-navy leading-tight">Merchant Dashboard</h1>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-brand-navy leading-tight truncate">Merchant Dashboard</h1>
             <p className="text-slate-500 text-sm hidden sm:block">Post loads, track shipments, and verify vehicles before dispatch.</p>
           </div>
         </div>
 
+        {/* Mobile: nav lives in the bottom tab bar now, so the top-right slot
+            just holds a quick logout button. */}
         <button
-          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open menu"
+          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-red-500 shrink-0"
+          onClick={handleLogout}
+          aria-label="Logout"
         >
-          <MenuIcon className="w-5 h-5" />
+          <LogoutIcon className="w-5 h-5" />
         </button>
       </div>
 
@@ -118,51 +118,13 @@ export default function MerchantDashboardPage() {
           </div>
         </aside>
 
-        {/* MOBILE DRAWER */}
-        {drawerOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-            <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl p-4 flex flex-col gap-1 animate-[slideIn_0.25s_ease-out]">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-bold text-brand-navy">Menu</span>
-                <button onClick={() => setDrawerOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400">
-                  <CloseIcon className="w-5 h-5" />
-                </button>
-              </div>
-              {TABS.map((tab) => (
-                <button
-                  key={tab.label}
-                  onClick={() => {
-                    setActiveTab(tab.label);
-                    setDrawerOpen(false);
-                  }}
-                  className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
-                >
-                  <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
-                    <tab.icon className="w-5 h-5 text-white" />
-                  </span>
-                  {tab.label}
-                </button>
-              ))}
-              <div className="border-t border-slate-100 mt-2 pt-2">
-                <button onClick={handleLogout} className="admin-sidebar-link text-red-500 w-full">
-                  <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
-                    <LogoutIcon className="w-5 h-5 text-white" />
-                  </span>
-                  Logout
-                </button>
-              </div>
-            </aside>
-          </div>
-        )}
-
         {/* CONTENT */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-6 lg:hidden overflow-x-auto pb-1">
-            <span className="icon-tile w-9 h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
+          <div className="flex items-center gap-2 mb-4 sm:mb-6 lg:hidden">
+            <span className="icon-tile w-8 h-8 sm:w-9 sm:h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
               <activeMeta.icon className="w-4 h-4 text-white" />
             </span>
-            <h2 className="font-bold text-brand-navy whitespace-nowrap">{activeTab}</h2>
+            <h2 className="font-bold text-brand-navy text-sm sm:text-base whitespace-nowrap">{activeTab}</h2>
           </div>
 
           {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
@@ -171,6 +133,42 @@ export default function MerchantDashboardPage() {
           {activeTab === "My Profile" && <MerchantProfile userId={user.id} initialProfile={profile} />}
         </div>
       </div>
+
+      {/* MOBILE BOTTOM TAB BAR — thumb-reachable primary navigation. Replaces
+          the old hamburger + off-canvas drawer, which made merchants take an
+          extra tap just to switch sections and buried Logout two levels deep. */}
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-100"
+        style={{ boxShadow: "0 -4px 16px rgba(14, 59, 46, 0.08)", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="grid grid-cols-4">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.label;
+            return (
+              <button
+                key={tab.label}
+                onClick={() => setActiveTab(tab.label)}
+                className="flex flex-col items-center justify-center gap-1 py-2 min-h-[56px]"
+                aria-current={isActive ? "page" : undefined}
+              >
+                <span
+                  className="icon-tile w-8 h-8 rounded-xl transition-transform"
+                  style={{
+                    "--tile-from": isActive ? tab.from : "#cbd5e1",
+                    "--tile-to": isActive ? tab.to : "#94a3b8",
+                    transform: isActive ? "translateY(-1px) scale(1.05)" : "none",
+                  }}
+                >
+                  <tab.icon className="w-4 h-4 text-white" />
+                </span>
+                <span className={`text-[10.5px] font-semibold leading-none ${isActive ? "text-brand-navy" : "text-slate-400"}`}>
+                  {tab.short}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </section>
   );
 }
@@ -339,9 +337,9 @@ function PostLoad({ merchantId }) {
           <label className="field-label">
             <ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity
           </label>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <input
-              type="number"
+              type="number" inputMode="decimal"
               required
               min="0"
               step="0.01"
@@ -414,9 +412,9 @@ function PostLoad({ merchantId }) {
           <label className="field-label">
             <WalletIcon className="w-4 h-4 text-brand-orange" /> Target Freight Rate (PKR, optional)
           </label>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <input
-              type="number"
+              type="number" inputMode="decimal"
               placeholder="e.g. 1200"
               value={form.offered_rate}
               onChange={(e) => setForm((f) => ({ ...f, offered_rate: e.target.value }))}
@@ -555,13 +553,13 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
               )}
 
               <div className="flex gap-2 pt-1 border-t border-slate-100">
-                <button onClick={() => setViewLoad(l)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 rounded-lg text-slate-600">
+                <button onClick={() => setViewLoad(l)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-2.5 min-h-[40px] text-xs font-semibold border border-slate-300 rounded-lg text-slate-600 active:bg-slate-50">
                   <EyeIcon className="w-3.5 h-3.5" /> View
                 </button>
-                <button onClick={() => onEdit(l)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 rounded-lg text-slate-600">
+                <button onClick={() => onEdit(l)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-2.5 min-h-[40px] text-xs font-semibold border border-slate-300 rounded-lg text-slate-600 active:bg-slate-50">
                   <EditIcon className="w-3.5 h-3.5" /> Edit
                 </button>
-                <button onClick={() => handleDelete(l.id)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold border border-red-200 text-red-600 rounded-lg">
+                <button onClick={() => handleDelete(l.id)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-2.5 min-h-[40px] text-xs font-semibold border border-red-200 text-red-600 rounded-lg active:bg-red-50">
                   <TrashIcon className="w-3.5 h-3.5" /> Delete
                 </button>
               </div>
@@ -704,8 +702,8 @@ function EditLoadModal({ load, commodities, quantityUnits, vehicleTypes, onClose
 
         <div>
           <label className="field-label"><ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity</label>
-          <div className="flex gap-3">
-            <input type="number" required min="0" step="0.01" value={form.quantity_value} onChange={(e) => setForm((f) => ({ ...f, quantity_value: e.target.value }))} className="field-input flex-1" />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input type="number" inputMode="decimal" required min="0" step="0.01" value={form.quantity_value} onChange={(e) => setForm((f) => ({ ...f, quantity_value: e.target.value }))} className="field-input flex-1" />
             <select required value={form.quantity_unit_id} onChange={(e) => setForm((f) => ({ ...f, quantity_unit_id: e.target.value }))} className="field-input sm:w-36 shrink-0">
               {quantityUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
@@ -745,8 +743,8 @@ function EditLoadModal({ load, commodities, quantityUnits, vehicleTypes, onClose
 
         <div>
           <label className="field-label"><WalletIcon className="w-4 h-4 text-brand-orange" /> Target Freight Rate (PKR, optional)</label>
-          <div className="flex gap-3">
-            <input type="number" value={form.offered_rate} onChange={(e) => setForm((f) => ({ ...f, offered_rate: e.target.value }))} className="field-input flex-1" />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input type="number" inputMode="decimal" value={form.offered_rate} onChange={(e) => setForm((f) => ({ ...f, offered_rate: e.target.value }))} className="field-input flex-1" />
             <select value={form.offered_rate_unit_id} onChange={(e) => setForm((f) => ({ ...f, offered_rate_unit_id: e.target.value }))} className="field-input sm:w-32 shrink-0">
               {quantityUnits.map((u) => <option key={u.id} value={u.id}>/ {u.name}</option>)}
             </select>

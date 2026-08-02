@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
+import { useLiveLocation } from "@/lib/useLiveLocation";
+import { haversineKm } from "@/lib/distance";
 import {
   TruckIcon,
   GridIcon,
@@ -12,18 +15,43 @@ import {
   ShieldCheckIcon,
   WalletIcon,
   TruckCheckIcon,
+  MenuIcon,
+  CloseIcon,
+  LogoutIcon,
+  MoonIcon,
+  RadarIcon,
+  MapPinIcon,
 } from "@/components/Icons";
+import ModeSwitcher from "@/components/driver/ModeSwitcher";
+import WorkTaskBar from "@/components/driver/WorkTaskBar";
+import LoadAlertOverlay from "@/components/driver/LoadAlertOverlay";
+
+// Leaflet touches `window`, so the map can only render on the client —
+// load it lazily with SSR turned off instead of at the top of the bundle.
+const DriverMap = dynamic(() => import("@/components/driver/DriverMap"), { ssr: false });
+
+const SEARCH_RADIUS_KM = 60;
 
 const TABS = [
-  { label: "Available Loads", icon: GridIcon },
-  { label: "My Trips", icon: RouteIcon },
+  { label: "Dashboard", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
+  { label: "Available Loads", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
+  { label: "My Trips", icon: RouteIcon, from: "#4ade80", to: "#15803d" },
 ];
 
 export default function DriverDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const [myVehicle, setMyVehicle] = useState(null);
+  const [mode, setMode] = useState("resting");
+  const [modeSaving, setModeSaving] = useState(false);
+
+  const [workLoads, setWorkLoads] = useState([]);
+  const [nearbyLoads, setNearbyLoads] = useState([]);
+  const [alertLoad, setAlertLoad] = useState(null);
+  const seenLoadIds = useRef(new Set());
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "driver")) {
@@ -31,60 +59,317 @@ export default function DriverDashboardPage() {
     }
   }, [loading, user, profile, router]);
 
-  useEffect(() => {
-    if (user) {
-      supabase
-        .from("vehicles")
-        .select("*")
-        .eq("driver_id", user.id)
-        .maybeSingle()
-        .then(({ data }) => setMyVehicle(data));
+  async function refreshVehicle() {
+    if (!user) return;
+    const { data } = await supabase.from("vehicles").select("*").eq("driver_id", user.id).maybeSingle();
+    setMyVehicle(data);
+    if (data?.status_mode) setMode(data.status_mode);
+  }
+  useEffect(() => { refreshVehicle(); }, [user]);
+
+  const { position, error: locationError } = useLiveLocation(myVehicle?.id, mode === "working" || mode === "searching");
+
+  async function handleModeChange(nextMode) {
+    if (!myVehicle) {
+      setActiveTab("Dashboard");
+      return;
     }
-  }, [user]);
+    setMode(nextMode); // optimistic — instant tap feedback matters most for this audience
+    setModeSaving(true);
+    await supabase.from("vehicles").update({ status_mode: nextMode }).eq("id", myVehicle.id);
+    setModeSaving(false);
+  }
+
+  // ---- Work Mode: my active (non-delivered) assigned loads ----
+  async function refreshWorkLoads() {
+    if (!myVehicle) return;
+    const { data } = await supabase
+      .from("loads")
+      .select("*")
+      .eq("assigned_vehicle_id", myVehicle.id)
+      .neq("status", "delivered")
+      .order("created_at", { ascending: false });
+    setWorkLoads(data ?? []);
+  }
+  useEffect(() => { refreshWorkLoads(); }, [myVehicle]);
+
+  async function advanceLoadStatus(load) {
+    const next = load.status === "assigned" ? "in_transit" : load.status === "in_transit" ? "delivered" : load.status;
+    await supabase.from("loads").update({ status: next }).eq("id", load.id);
+    refreshWorkLoads();
+  }
+
+  // ---- Search Mode: nearby matching open loads, refreshed periodically ----
+  async function refreshNearbyLoads() {
+    if (!position || mode !== "searching") return;
+    const { data, error } = await supabase.rpc("nearby_open_loads", {
+      p_lat: position.lat,
+      p_lng: position.lng,
+      p_vehicle_type: myVehicle?.vehicle_type ?? null,
+      p_radius_km: SEARCH_RADIUS_KM,
+    });
+    if (!error) setNearbyLoads(data ?? []);
+  }
+  useEffect(() => {
+    refreshNearbyLoads();
+    if (mode !== "searching") return undefined;
+    const interval = setInterval(refreshNearbyLoads, 25000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, position?.lat, position?.lng, myVehicle?.vehicle_type]);
+
+  // ---- Live InDrive/Yango-style alert: fires the instant a matching load is posted ----
+  useEffect(() => {
+    if (mode !== "searching" || !position) return undefined;
+
+    const channel = supabase
+      .channel("driver-nearby-load-alerts")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "loads", filter: "status=eq.open" },
+        ({ new: newLoad }) => {
+          if (seenLoadIds.current.has(newLoad.id)) return;
+          if (newLoad.vehicle_type_needed && myVehicle?.vehicle_type && newLoad.vehicle_type_needed !== myVehicle.vehicle_type) return;
+          if (newLoad.pickup_lat == null || newLoad.pickup_lng == null) return;
+
+          const distance_km = haversineKm(position.lat, position.lng, newLoad.pickup_lat, newLoad.pickup_lng);
+          if (distance_km > SEARCH_RADIUS_KM) return;
+
+          seenLoadIds.current.add(newLoad.id);
+          setNearbyLoads((prev) => [{ ...newLoad, distance_km }, ...prev]);
+          setAlertLoad({ ...newLoad, distance_km });
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [mode, position, myVehicle]);
+
+  async function acceptLoad(load) {
+    if (!myVehicle) return;
+    await supabase.from("bids").insert({
+      load_id: load.id,
+      driver_id: user.id,
+      vehicle_id: myVehicle.id,
+      bid_amount: load.offered_rate ?? 0,
+      status: "accepted",
+    });
+    await supabase.from("loads").update({ status: "assigned", assigned_vehicle_id: myVehicle.id }).eq("id", load.id);
+    setNearbyLoads((prev) => prev.filter((l) => l.id !== load.id));
+    setAlertLoad(null);
+    await refreshWorkLoads();
+    handleModeChange("working");
+    setActiveTab("Dashboard");
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
 
   if (loading || !user || profile?.role !== "driver") return null;
 
+  const activeMeta = TABS.find((t) => t.label === activeTab);
+
   return (
-    <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex items-center gap-3 mb-1">
-        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
-          <TruckIcon className="w-6 h-6" />
-        </span>
-        <h1 className="text-3xl font-bold text-brand-navy">Driver Dashboard</h1>
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+      {alertLoad && (
+        <LoadAlertOverlay load={alertLoad} onAccept={acceptLoad} onDismiss={() => setAlertLoad(null)} />
+      )}
+
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <span className="icon-tile w-12 h-12" style={{ "--tile-from": "#4ade80", "--tile-to": "#15803d" }}>
+            <TruckIcon className="w-6 h-6 text-white" />
+          </span>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-brand-navy leading-tight">Driver Dashboard</h1>
+            <p className="text-slate-500 text-sm hidden sm:block">Set your status, find loads, and manage trips.</p>
+          </div>
+        </div>
+
+        <button
+          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open menu"
+        >
+          <MenuIcon className="w-5 h-5" />
+        </button>
       </div>
-      <p className="text-slate-500 mb-2">View open load offers, place bids, and manage your trips.</p>
+
       {!myVehicle && (
         <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
           <ShieldCheckIcon className="w-4 h-4 shrink-0" />
           You haven&apos;t registered a vehicle yet.{" "}
-          <a href="/register" className="font-semibold underline">Register now</a> to start bidding on loads.
+          <a href="/register" className="font-semibold underline">Register now</a> to switch modes and receive loads.
         </p>
       )}
 
-      <div className="flex gap-2 mb-8 border-b border-slate-200 overflow-x-auto">
-        {TABS.map((tab) => (
-          <button
-            key={tab.label}
-            onClick={() => setActiveTab(tab.label)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              activeTab === tab.label
-                ? "border-brand-orange text-brand-navy"
-                : "border-transparent text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
+      {/* MODE SWITCHER — pinned above everything, always visible regardless of tab */}
+      <div className="mb-6">
+        <ModeSwitcher mode={mode} onChange={handleModeChange} disabled={!myVehicle || modeSaving} />
       </div>
 
-      {activeTab === "Available Loads" && <AvailableLoads driverId={user.id} vehicle={myVehicle} />}
-      {activeTab === "My Trips" && <MyTrips driverId={user.id} vehicle={myVehicle} />}
+      <div className="flex gap-6 items-start">
+        {/* DESKTOP SIDEBAR — mirrors the Admin Dashboard's navigation structure */}
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white rounded-2xl shadow-card p-3 sticky top-24 gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.label}
+              onClick={() => setActiveTab(tab.label)}
+              className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
+            >
+              <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+                <tab.icon className="w-5 h-5 text-white" />
+              </span>
+              {tab.label}
+            </button>
+          ))}
+          <div className="border-t border-slate-100 mt-2 pt-2">
+            <button onClick={handleLogout} className="admin-sidebar-link text-red-500 hover:bg-red-50 w-full">
+              <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+                <LogoutIcon className="w-5 h-5 text-white" />
+              </span>
+              Logout
+            </button>
+          </div>
+        </aside>
+
+        {/* MOBILE DRAWER */}
+        {drawerOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+            <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl p-4 flex flex-col gap-1 animate-[slideIn_0.25s_ease-out]">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-bold text-brand-navy">Menu</span>
+                <button onClick={() => setDrawerOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400">
+                  <CloseIcon className="w-5 h-5" />
+                </button>
+              </div>
+              {TABS.map((tab) => (
+                <button
+                  key={tab.label}
+                  onClick={() => {
+                    setActiveTab(tab.label);
+                    setDrawerOpen(false);
+                  }}
+                  className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
+                >
+                  <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+                    <tab.icon className="w-5 h-5 text-white" />
+                  </span>
+                  {tab.label}
+                </button>
+              ))}
+              <div className="border-t border-slate-100 mt-2 pt-2">
+                <button onClick={handleLogout} className="admin-sidebar-link text-red-500 w-full">
+                  <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+                    <LogoutIcon className="w-5 h-5 text-white" />
+                  </span>
+                  Logout
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* CONTENT */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-6 lg:hidden overflow-x-auto pb-1">
+            <span className="icon-tile w-9 h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
+              <activeMeta.icon className="w-4 h-4 text-white" />
+            </span>
+            <h2 className="font-bold text-brand-navy whitespace-nowrap">{activeTab}</h2>
+          </div>
+
+          {activeTab === "Dashboard" && (
+            <DashboardHome
+              mode={mode}
+              myVehicle={myVehicle}
+              workLoads={workLoads}
+              onAdvance={advanceLoadStatus}
+              position={position}
+              locationError={locationError}
+              nearbyLoads={nearbyLoads}
+              onAccept={acceptLoad}
+            />
+          )}
+          {activeTab === "Available Loads" && <AvailableLoads driverId={user.id} vehicle={myVehicle} onAccepted={refreshWorkLoads} />}
+          {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} onAdvance={advanceLoadStatus} />}
+        </div>
+      </div>
     </section>
   );
 }
 
-function AvailableLoads({ driverId, vehicle }) {
+function DashboardHome({ mode, myVehicle, workLoads, onAdvance, position, locationError, nearbyLoads, onAccept }) {
+  if (!myVehicle) {
+    return (
+      <div className="card text-center py-12">
+        <ShieldCheckIcon className="w-10 h-10 text-brand-orange mx-auto mb-3" />
+        <p className="font-semibold text-brand-navy mb-1">Register your vehicle to get started</p>
+        <p className="text-sm text-slate-500 mb-4">Once registered, you can switch modes and start receiving loads.</p>
+        <a href="/register" className="btn-orange inline-flex">Register Now</a>
+      </div>
+    );
+  }
+
+  if (mode === "working") {
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="icon-badge bg-green-500/10 text-green-600 w-9 h-9 rounded-lg"><TruckIcon className="w-4 h-4" /></span>
+          <h3 className="font-bold text-brand-navy">Work Mode — Live Status</h3>
+        </div>
+        <WorkTaskBar loads={workLoads} onAdvance={onAdvance} />
+      </div>
+    );
+  }
+
+  if (mode === "searching") {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="icon-badge bg-blue-500/10 text-blue-600 w-9 h-9 rounded-lg"><RadarIcon className="w-4 h-4" /></span>
+            <h3 className="font-bold text-brand-navy">Searching for Loads Nearby</h3>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Live
+          </span>
+        </div>
+
+        {locationError && (
+          <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-4 flex items-center gap-2">
+            <MapPinIcon className="w-4 h-4 shrink-0" /> {locationError}
+          </p>
+        )}
+
+        <DriverMap driverPosition={position} loads={nearbyLoads} onAccept={onAccept} radiusKm={SEARCH_RADIUS_KM} />
+
+        <p className="text-xs text-slate-400 mt-3">
+          Matching loads for your vehicle type within {SEARCH_RADIUS_KM} km will ring and pop up automatically.
+        </p>
+      </div>
+    );
+  }
+
+  // resting
+  return (
+    <div className="card text-center py-14">
+      <span className="icon-badge-round bg-brand-orangeSoft text-brand-orangeDark mx-auto mb-4">
+        <MoonIcon className="w-9 h-9" />
+      </span>
+      <p className="font-bold text-brand-navy text-lg mb-1">You&apos;re Resting</p>
+      <p className="text-sm text-slate-500 max-w-xs mx-auto">
+        You&apos;re marked offline and won&apos;t receive new load alerts. Switch to
+        &quot;Find Loads&quot; when you&apos;re ready to go back on duty.
+      </p>
+    </div>
+  );
+}
+
+function AvailableLoads({ driverId, vehicle, onAccepted }) {
   const [loads, setLoads] = useState([]);
   const [bidAmounts, setBidAmounts] = useState({});
   const [message, setMessage] = useState("");
@@ -111,6 +396,7 @@ function AvailableLoads({ driverId, vehicle }) {
       await supabase.from("loads").update({ status: "assigned", assigned_vehicle_id: vehicle.id }).eq("id", load.id);
       setMessage(`Load accepted at PKR ${amount}. A digital bilty has been generated.`);
       refresh();
+      onAccepted?.();
     } else {
       setMessage(`Counter-bid of PKR ${amount} sent to the merchant.`);
     }
@@ -135,7 +421,7 @@ function AvailableLoads({ driverId, vehicle }) {
               <TruckIcon className="w-5 h-5" />
             </span>
             <div>
-              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_munds} munds</p>
+              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}</p>
               <p className="text-sm text-slate-500 flex items-center gap-1.5">
                 <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
               </p>
@@ -167,7 +453,7 @@ function AvailableLoads({ driverId, vehicle }) {
   );
 }
 
-function MyTrips({ vehicle }) {
+function MyTrips({ vehicle, onAdvance }) {
   const [loads, setLoads] = useState([]);
 
   async function refresh() {
@@ -182,8 +468,7 @@ function MyTrips({ vehicle }) {
   useEffect(() => { refresh(); }, [vehicle]);
 
   async function advanceStatus(load) {
-    const next = load.status === "assigned" ? "in_transit" : load.status === "in_transit" ? "delivered" : load.status;
-    await supabase.from("loads").update({ status: next }).eq("id", load.id);
+    await onAdvance(load);
     refresh();
   }
 
@@ -201,7 +486,7 @@ function MyTrips({ vehicle }) {
               <TruckIcon className="w-5 h-5" />
             </span>
             <div>
-              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_munds} munds</p>
+              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}</p>
               <p className="text-sm text-slate-500 flex items-center gap-1.5">
                 <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
               </p>

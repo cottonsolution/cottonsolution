@@ -19,6 +19,7 @@ import {
   IdCardIcon,
   UserIcon,
   PhoneIcon,
+  CrosshairIcon,
 } from "@/components/Icons";
 
 const COMMODITIES = ["Cotton", "Wheat", "Rapeseed", "Maize", "Rice", "Sugarcane", "Other"];
@@ -88,9 +89,38 @@ function PostLoad({ merchantId }) {
     pickup_location: "",
     dropoff_location: "",
     offered_rate: "",
+    vehicle_type_needed: "",
   });
+  const [pickupCoords, setPickupCoords] = useState(null); // { lat, lng }
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState("");
+  const [vehicleTypes, setVehicleTypes] = useState([]);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    supabase.from("vehicle_types").select("*").order("sort_order").then(({ data }) => setVehicleTypes(data ?? []));
+  }, []);
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setLocateError("Location isn't available on this device/browser.");
+      return;
+    }
+    setLocating(true);
+    setLocateError("");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setPickupCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocating(false);
+      },
+      () => {
+        setLocateError("Couldn't get your location — check permissions.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -107,10 +137,14 @@ function PostLoad({ merchantId }) {
       pickup_location: form.pickup_location,
       dropoff_location: form.dropoff_location,
       offered_rate: form.offered_rate ? Number(form.offered_rate) : null,
+      vehicle_type_needed: form.vehicle_type_needed || null,
+      pickup_lat: pickupCoords?.lat ?? null,
+      pickup_lng: pickupCoords?.lng ?? null,
     });
     if (insertError) return setError(insertError.message);
     setSuccess(true);
-    setForm({ commodity: "Cotton", quantity_value: "", quantity_unit: "Munds", pickup_location: "", dropoff_location: "", offered_rate: "" });
+    setPickupCoords(null);
+    setForm({ commodity: "Cotton", quantity_value: "", quantity_unit: "Munds", pickup_location: "", dropoff_location: "", offered_rate: "", vehicle_type_needed: "" });
   }
 
   const CommodityIcon = COMMODITY_ICON[form.commodity] ?? CottonIcon;
@@ -179,6 +213,22 @@ function PostLoad({ merchantId }) {
           </div>
         </div>
       </div>
+      <div>
+        <label className="field-label">
+          <TruckIcon className="w-4 h-4 text-brand-orange" /> Truck Type Needed (optional)
+        </label>
+        <select
+          value={form.vehicle_type_needed}
+          onChange={(e) => setForm((f) => ({ ...f, vehicle_type_needed: e.target.value }))}
+          className="field-input"
+        >
+          <option value="">Any truck type</option>
+          {vehicleTypes.map((t) => (
+            <option key={t.id} value={t.name}>{t.name}</option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-400 mt-1">Only drivers with a matching registered truck will be alerted first.</p>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="field-label">
@@ -190,6 +240,16 @@ function PostLoad({ merchantId }) {
             onChange={(e) => setForm((f) => ({ ...f, pickup_location: e.target.value }))}
             className="field-input"
           />
+          <button
+            type="button"
+            onClick={useMyLocation}
+            disabled={locating}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-orange disabled:opacity-50"
+          >
+            <CrosshairIcon className="w-3.5 h-3.5" />
+            {locating ? "Locating…" : pickupCoords ? "Location pinned ✓" : "Pin pickup on the map (uses your current location)"}
+          </button>
+          {locateError && <p className="text-xs text-red-500 mt-1">{locateError}</p>}
         </div>
         <div>
           <label className="field-label">

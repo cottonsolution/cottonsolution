@@ -153,6 +153,11 @@ create table if not exists public.vehicles (
   permit_expiry       date not null,
   permit_image_url    text,
   status              text default 'active' check (status in ('active', 'suspended')),
+  -- Driver Portal: on-duty mode + live GPS position (see Admin/Driver docs)
+  status_mode         text not null default 'resting' check (status_mode in ('working', 'resting', 'searching')),
+  current_lat         numeric,
+  current_lng         numeric,
+  location_updated_at timestamptz,
   created_at          timestamptz default now()
 );
 
@@ -196,6 +201,9 @@ create table if not exists public.loads (
   quantity_unit        text default 'Munds' check (quantity_unit in ('Munds', 'Tons')),
   pickup_location     text not null,
   dropoff_location    text not null,
+  pickup_lat          numeric,          -- captured via the merchant's "use my location" button
+  pickup_lng          numeric,
+  vehicle_type_needed text,             -- required truck category — used to match drivers in Search mode
   offered_rate        numeric,          -- Target Freight Rate (PKR)
   status              text default 'open' check (status in ('open', 'assigned', 'in_transit', 'delivered', 'cancelled')),
   assigned_vehicle_id uuid references public.vehicles (id),
@@ -404,3 +412,71 @@ insert into public.how_it_works_steps (step_number, title, description, sort_ord
   (2, 'Get Matched & Verified', 'Verified nearby drivers bid on the load; merchants confirm vehicle legal status.', 2),
   (3, 'Dispatch & Track', 'Goods move with a digital bilty while both sides track the trip in real time.', 3)
 on conflict do nothing;
+
+-- ============================================================================
+-- DRIVER PORTAL — nearby-loads matching (Haversine, no PostGIS needed) +
+-- realtime so a driver in "Search" mode gets live InDrive/Yango-style alerts.
+-- ============================================================================
+create or replace function public.nearby_open_loads(
+  p_lat numeric,
+  p_lng numeric,
+  p_vehicle_type text default null,
+  p_radius_km numeric default 100
+)
+returns table (
+  id uuid,
+  commodity text,
+  quantity_munds numeric,
+  quantity_value numeric,
+  quantity_unit text,
+  pickup_location text,
+  dropoff_location text,
+  pickup_lat numeric,
+  pickup_lng numeric,
+  offered_rate numeric,
+  vehicle_type_needed text,
+  created_at timestamptz,
+  distance_km numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with candidates as (
+    select
+      l.id, l.commodity, l.quantity_munds, l.quantity_value, l.quantity_unit,
+      l.pickup_location, l.dropoff_location, l.pickup_lat, l.pickup_lng,
+      l.offered_rate, l.vehicle_type_needed, l.created_at,
+      round(
+        (6371 * acos(
+          greatest(-1::numeric, least(1::numeric,
+            cos(radians(p_lat)) * cos(radians(l.pickup_lat)) *
+            cos(radians(l.pickup_lng) - radians(p_lng)) +
+            sin(radians(p_lat)) * sin(radians(l.pickup_lat))
+          ))
+        ))::numeric, 1
+      ) as distance_km
+    from public.loads l
+    where l.status = 'open'
+      and l.pickup_lat is not null
+      and l.pickup_lng is not null
+      and (p_vehicle_type is null or l.vehicle_type_needed is null or l.vehicle_type_needed = p_vehicle_type)
+  )
+  select * from candidates
+  where distance_km <= p_radius_km
+  order by distance_km asc;
+$$;
+
+grant execute on function public.nearby_open_loads(numeric, numeric, text, numeric) to authenticated;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'loads'
+  ) then
+    alter publication supabase_realtime add table public.loads;
+  end if;
+end $$;
+

@@ -512,6 +512,44 @@ export function SpeakerOffIcon({ className }) {
   );
 }
 
+export function MoonIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />
+    </svg>
+  );
+}
+
+export function RadarIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5.2" opacity="0.6" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M12 12 18 7" opacity="0.8" />
+    </svg>
+  );
+}
+
+export function CrosshairIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22" />
+    </svg>
+  );
+}
+
+export function SirenIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M12 3a5 5 0 0 1 5 5v6H7V8a5 5 0 0 1 5-5Z" />
+      <path d="M4 14h16v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3Z" />
+      <path d="M12 3V1M7 5 5.5 3.5M17 5 18.5 3.5" />
+    </svg>
+  );
+}
+
 export function TrashIcon({ className }) {
   return (
     <svg className={className} {...base}>

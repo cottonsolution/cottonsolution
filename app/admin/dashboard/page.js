@@ -29,6 +29,11 @@ import {
   InstagramIcon,
   YoutubeIcon,
   XIcon,
+  BoxIcon,
+  ScaleIcon,
+  EditIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
 } from "@/components/Icons";
 
 // Each tab gets its own gradient (via CSS vars) so the sidebar icon tiles
@@ -38,7 +43,9 @@ const TABS = [
   { label: "Home Content", icon: HomeIcon, from: "#38bdf8", to: "#0369a1" },
   { label: "Our Services", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
   { label: "How It Works", icon: RouteIcon, from: "#fb923c", to: "#c2410c" },
-  { label: "Vehicle Types", icon: TruckIcon, from: "#4ade80", to: "#15803d" },
+  { label: "Commodity", icon: BoxIcon, from: "#facc15", to: "#a16207" },
+  { label: "Quantity Units", icon: ScaleIcon, from: "#2dd4bf", to: "#0f766e" },
+  { label: "Truck Types", icon: TruckIcon, from: "#4ade80", to: "#15803d" },
   { label: "Contact", icon: MailIcon, from: "#f472b6", to: "#be185d" },
   { label: "Expiry Alerts", icon: BellIcon, from: "#f87171", to: "#b91c1c" },
 ];
@@ -162,7 +169,9 @@ export default function AdminDashboardPage() {
           {activeTab === "Home Content" && <HomeContentManager />}
           {activeTab === "Our Services" && <ServicesManager />}
           {activeTab === "How It Works" && <StepsManager />}
-          {activeTab === "Vehicle Types" && <VehicleTypesManager />}
+          {activeTab === "Commodity" && <CommodityManager />}
+          {activeTab === "Quantity Units" && <QuantityUnitsManager />}
+          {activeTab === "Truck Types" && <VehicleTypesManager />}
           {activeTab === "Contact" && <ContactManager />}
           {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
         </div>
@@ -717,8 +726,9 @@ function VehicleTypesManager() {
   return (
     <div className="space-y-8">
       <p className="text-sm text-slate-500 -mt-2">
-        These categories populate the <strong>Vehicle Type</strong> dropdown on the driver
-        registration form automatically — add, rename, or remove them anytime.
+        These categories populate the <strong>Truck Type</strong> dropdown on the driver
+        registration form <em>and</em> the merchant&apos;s Post Load form (where it&apos;s a
+        required field) — add, rename, or remove them anytime.
       </p>
 
       <form onSubmit={handleAdd} className="card flex flex-col sm:flex-row gap-4 sm:items-end">
@@ -779,6 +789,233 @@ function VehicleTypeRow({ type, isEditing, onEdit, onCancel, onSave, onDelete })
       <div className="flex gap-2 shrink-0">
         <button onClick={onEdit} className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg">Edit</button>
         <button onClick={onDelete} className="px-2.5 py-1.5 text-sm border border-red-200 text-red-600 rounded-lg">
+          <TrashIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TAB: COMMODITY CMS (CRUD + reorder + active toggle) — feeds the
+// merchant's "Commodity" dropdown on the Post Load form
+// ---------------------------------------------------------------------------
+function CommodityManager() {
+  return (
+    <ManagedListCRUD
+      table="commodities"
+      itemLabel="Commodity"
+      icon={BoxIcon}
+      description={
+        <>
+          These populate the <strong>Commodity</strong> dropdown on the merchant&apos;s Post Load
+          form. Only <strong>active</strong> commodities show up there — untick a commodity to
+          hide it without losing its history on past loads.
+        </>
+      }
+      placeholder="e.g. Cotton, Wheat, Maize"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TAB: QUANTITY UNITS CMS (CRUD + reorder + active toggle) — feeds the
+// "Quantity" unit dropdown AND the "Target Freight" rate-unit dropdown
+// ---------------------------------------------------------------------------
+function QuantityUnitsManager() {
+  return (
+    <ManagedListCRUD
+      table="quantity_units"
+      itemLabel="Quantity Unit"
+      icon={ScaleIcon}
+      description={
+        <>
+          These measurement units (e.g. Munds, Tons, KGs, Bori) populate <strong>both</strong> the
+          Quantity dropdown and the Target Freight rate-unit dropdown (shown as{" "}
+          <code className="bg-slate-100 px-1 rounded">1200 / Ton</code>) on the merchant&apos;s
+          Post Load form.
+        </>
+      }
+      placeholder="e.g. Munds, Tons, KGs, Bori"
+      withSymbol
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared CRUD list builder used by CommodityManager & QuantityUnitsManager.
+// Supports: add, inline edit, delete, active/inactive toggle, and reorder
+// (up/down) — persisted to `sort_order` so the merchant-facing dropdown
+// order matches exactly what the admin arranged here.
+// ---------------------------------------------------------------------------
+function ManagedListCRUD({ table, itemLabel, icon: Icon, description, placeholder, withSymbol = false }) {
+  const [items, setItems] = useState([]);
+  const [draftName, setDraftName] = useState("");
+  const [draftSymbol, setDraftSymbol] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    const { data, error: fetchError } = await supabase.from(table).select("*").order("sort_order");
+    if (fetchError) setError(fetchError.message);
+    setItems(data ?? []);
+    setLoading(false);
+  }
+  useEffect(() => { refresh(); }, [table]);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    setError("");
+    if (!draftName.trim()) return;
+    const payload = { name: draftName.trim(), sort_order: items.length + 1 };
+    if (withSymbol) payload.symbol = draftSymbol.trim() || null;
+    const { error: insertError } = await supabase.from(table).insert(payload);
+    if (insertError) return setError(insertError.message);
+    setDraftName("");
+    setDraftSymbol("");
+    refresh();
+  }
+
+  async function handleUpdate(id, updates) {
+    const { error: updateError } = await supabase.from(table).update(updates).eq("id", id);
+    if (updateError) return setError(updateError.message);
+    setEditingId(null);
+    refresh();
+  }
+
+  async function handleDelete(id) {
+    if (!confirm(`Delete this ${itemLabel.toLowerCase()}? Existing loads that used it keep their record.`)) return;
+    await supabase.from(table).delete().eq("id", id);
+    refresh();
+  }
+
+  async function handleToggleActive(item) {
+    await supabase.from(table).update({ active: !item.active }).eq("id", item.id);
+    refresh();
+  }
+
+  async function handleReorder(index, direction) {
+    const swapIndex = index + direction;
+    if (swapIndex < 0 || swapIndex >= items.length) return;
+    const a = items[index];
+    const b = items[swapIndex];
+    await Promise.all([
+      supabase.from(table).update({ sort_order: b.sort_order }).eq("id", a.id),
+      supabase.from(table).update({ sort_order: a.sort_order }).eq("id", b.id),
+    ]);
+    refresh();
+  }
+
+  if (loading) return <p className="text-slate-400 text-sm">Loading {itemLabel.toLowerCase()}s…</p>;
+
+  return (
+    <div className="space-y-8">
+      <p className="text-sm text-slate-500 -mt-2 leading-relaxed">{description}</p>
+
+      <form onSubmit={handleAdd} className="card flex flex-col sm:flex-row gap-4 sm:items-end">
+        <div className="flex-1">
+          <label className="text-sm font-medium text-slate-700">New {itemLabel}</label>
+          <input
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            placeholder={placeholder}
+            className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+          />
+        </div>
+        {withSymbol && (
+          <div className="sm:w-32">
+            <label className="text-sm font-medium text-slate-700">Symbol</label>
+            <input
+              value={draftSymbol}
+              onChange={(e) => setDraftSymbol(e.target.value)}
+              placeholder="e.g. Kg"
+              className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+            />
+          </div>
+        )}
+        <button type="submit" className="btn-orange h-fit">
+          <PlusIcon className="w-4 h-4" /> Add {itemLabel}
+        </button>
+      </form>
+      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <ManagedListRow
+            key={item.id}
+            item={item}
+            index={index}
+            total={items.length}
+            icon={Icon}
+            withSymbol={withSymbol}
+            isEditing={editingId === item.id}
+            onEdit={() => setEditingId(item.id)}
+            onCancel={() => setEditingId(null)}
+            onSave={(updates) => handleUpdate(item.id, updates)}
+            onDelete={() => handleDelete(item.id)}
+            onToggleActive={() => handleToggleActive(item)}
+            onMoveUp={() => handleReorder(index, -1)}
+            onMoveDown={() => handleReorder(index, 1)}
+          />
+        ))}
+        {items.length === 0 && <p className="text-slate-400 text-sm">No {itemLabel.toLowerCase()}s yet — add one above.</p>}
+      </div>
+    </div>
+  );
+}
+
+function ManagedListRow({ item, index, total, icon: Icon, withSymbol, isEditing, onEdit, onCancel, onSave, onDelete, onToggleActive, onMoveUp, onMoveDown }) {
+  const [name, setName] = useState(item.name);
+  const [symbol, setSymbol] = useState(item.symbol ?? "");
+
+  if (isEditing) {
+    return (
+      <div className="card flex flex-col sm:flex-row gap-2 sm:items-center">
+        <input value={name} onChange={(e) => setName(e.target.value)} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+        {withSymbol && (
+          <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="Symbol" className="sm:w-28 border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+        )}
+        <div className="flex gap-2">
+          <button onClick={() => onSave(withSymbol ? { name, symbol: symbol || null } : { name })} className="btn-orange px-3 py-2 text-sm">Save</button>
+          <button onClick={onCancel} className="px-3 py-2 text-sm border border-slate-300 rounded-lg">Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className={`icon-badge w-10 h-10 rounded-lg shrink-0 ${item.active ? "bg-brand-orange/10 text-brand-orange" : "bg-slate-100 text-slate-400"}`}>
+          <Icon className="w-5 h-5" />
+        </span>
+        <div className="min-w-0">
+          <p className={`font-semibold text-sm truncate ${item.active ? "text-brand-navy" : "text-slate-400"}`}>
+            {item.name} {withSymbol && item.symbol ? <span className="text-slate-400 font-normal">({item.symbol})</span> : null}
+          </p>
+          {!item.active && <p className="text-xs text-slate-400">Hidden from merchant dropdowns</p>}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button onClick={onMoveUp} disabled={index === 0} className="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30" title="Move up">
+          <ArrowUpIcon className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={onMoveDown} disabled={index === total - 1} className="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg text-slate-500 disabled:opacity-30" title="Move down">
+          <ArrowDownIcon className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onToggleActive}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border ${
+            item.active ? "border-green-200 text-green-700 bg-green-50" : "border-slate-200 text-slate-500"
+          }`}
+        >
+          {item.active ? "Active" : "Inactive"}
+        </button>
+        <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded-lg text-slate-600" title="Edit">
+          <EditIcon className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center border border-red-200 text-red-600 rounded-lg" title="Delete">
           <TrashIcon className="w-3.5 h-3.5" />
         </button>
       </div>

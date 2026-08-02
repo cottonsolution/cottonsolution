@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
 import VehicleSearch from "@/components/VehicleSearch";
+import LocationAutocomplete from "@/components/LocationAutocomplete";
 import { effectiveStage, stageMeta } from "@/lib/tripStages";
 import {
   TruckIcon,
@@ -27,9 +29,15 @@ import {
   RadarIcon,
   ClockIcon,
   TruckCheckIcon,
+  EditIcon,
+  EyeIcon,
+  TrashIcon,
+  BoxIcon,
+  ScaleIcon,
 } from "@/components/Icons";
 
-const COMMODITIES = ["Cotton", "Wheat", "Rapeseed", "Maize", "Rice", "Sugarcane", "Other"];
+const MiniMapPreview = dynamic(() => import("@/components/MiniMapPreview"), { ssr: false });
+
 const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIcon, Maize: WheatIcon, Rice: WheatIcon, Sugarcane: WheatIcon, Other: TruckIcon };
 
 // Each tab gets its own gradient tile — same "semi-realistic" sidebar
@@ -169,223 +177,588 @@ export default function MerchantDashboardPage() {
 
 const MUNDS_PER_TON = 26.796; // 1 metric ton ≈ 26.8 Pakistani munds (37.32 kg each)
 
+// Best-effort conversion into the legacy `quantity_munds` column (kept for
+// backward compatibility / driver-side matching). Custom admin-added units
+// with no known conversion factor are stored as-is (1:1) since we can't
+// infer their weight without the admin defining a conversion — the
+// `quantity_value` + `quantity_unit` pair is always the source of truth.
+function toMunds(value, unitName) {
+  if (unitName === "Tons") return Math.round(value * MUNDS_PER_TON * 100) / 100;
+  if (unitName === "KGs") return Math.round((value / 37.32) * 100) / 100;
+  return value; // Munds, Bori, or any other custom unit
+}
+
+const EMPTY_FORM = {
+  commodity_id: "",
+  quantity_value: "",
+  quantity_unit_id: "",
+  vehicle_type_id: "",
+  pickup_location: "",
+  dropoff_location: "",
+  offered_rate: "",
+  offered_rate_unit_id: "",
+};
+
 function PostLoad({ merchantId }) {
-  const [form, setForm] = useState({
-    commodity: "Cotton",
-    quantity_value: "",
-    quantity_unit: "Munds",
-    pickup_location: "",
-    dropoff_location: "",
-    offered_rate: "",
-    vehicle_type_needed: "",
-  });
-  const [pickupCoords, setPickupCoords] = useState(null); // { lat, lng }
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState("");
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [pickupCoords, setPickupCoords] = useState(null); // { lat, lng, place_id }
+  const [dropoffCoords, setDropoffCoords] = useState(null); // { lat, lng, place_id }
+  const [commodities, setCommodities] = useState([]);
+  const [quantityUnits, setQuantityUnits] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [success, setSuccess] = useState(false);
   const [wasLiveConnected, setWasLiveConnected] = useState(false);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0); // bumped after a successful post so the cards list refetches
+  const [editingLoad, setEditingLoad] = useState(null); // load row being edited, or null
 
+  // Dynamic dropdown sources — Commodity, Quantity Unit, and Truck Type all
+  // come from the Admin Dashboard (functional requirements #1, #2, #3, #6).
   useEffect(() => {
+    supabase.from("commodities").select("*").eq("active", true).order("sort_order").then(({ data }) => {
+      setCommodities(data ?? []);
+      setForm((f) => (f.commodity_id ? f : { ...f, commodity_id: data?.[0]?.id ?? "" }));
+    });
+    supabase.from("quantity_units").select("*").eq("active", true).order("sort_order").then(({ data }) => {
+      setQuantityUnits(data ?? []);
+      setForm((f) => ({
+        ...f,
+        quantity_unit_id: f.quantity_unit_id || data?.[0]?.id || "",
+        offered_rate_unit_id: f.offered_rate_unit_id || data?.[0]?.id || "",
+      }));
+    });
     supabase.from("vehicle_types").select("*").order("sort_order").then(({ data }) => setVehicleTypes(data ?? []));
   }, []);
 
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setLocateError("Location isn't available on this device/browser.");
-      return;
-    }
-    setLocating(true);
-    setLocateError("");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setPickupCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocating(false);
-      },
-      () => {
-        setLocateError("Couldn't get your location — check permissions.");
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
+  function resetForm() {
+    setForm({
+      ...EMPTY_FORM,
+      commodity_id: commodities[0]?.id ?? "",
+      quantity_unit_id: quantityUnits[0]?.id ?? "",
+      offered_rate_unit_id: quantityUnits[0]?.id ?? "",
+    });
+    setPickupCoords(null);
+    setDropoffCoords(null);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+
+    if (!form.commodity_id) return setError("Please select a commodity.");
+    if (!form.quantity_unit_id) return setError("Please select a quantity unit.");
+    if (!form.vehicle_type_id) return setError("Truck type is required — please select one.");
+
+    const commodity = commodities.find((c) => c.id === form.commodity_id);
+    const quantityUnit = quantityUnits.find((u) => u.id === form.quantity_unit_id);
+    const vehicleType = vehicleTypes.find((v) => v.id === form.vehicle_type_id);
+    const rateUnit = quantityUnits.find((u) => u.id === form.offered_rate_unit_id);
+
     const value = Number(form.quantity_value);
-    const quantityMunds = form.quantity_unit === "Tons" ? Math.round(value * MUNDS_PER_TON * 100) / 100 : value;
 
     const { error: insertError } = await supabase.from("loads").insert({
       merchant_id: merchantId,
-      commodity: form.commodity,
-      quantity_munds: quantityMunds,
+      commodity: commodity?.name ?? "Other",
+      commodity_id: form.commodity_id,
+      quantity_munds: toMunds(value, quantityUnit?.name),
       quantity_value: value,
-      quantity_unit: form.quantity_unit,
+      quantity_unit: quantityUnit?.name ?? "Munds",
+      quantity_unit_id: form.quantity_unit_id,
       pickup_location: form.pickup_location,
       dropoff_location: form.dropoff_location,
-      offered_rate: form.offered_rate ? Number(form.offered_rate) : null,
-      vehicle_type_needed: form.vehicle_type_needed || null,
       pickup_lat: pickupCoords?.lat ?? null,
       pickup_lng: pickupCoords?.lng ?? null,
+      pickup_place_id: pickupCoords?.place_id ?? null,
+      dropoff_lat: dropoffCoords?.lat ?? null,
+      dropoff_lng: dropoffCoords?.lng ?? null,
+      dropoff_place_id: dropoffCoords?.place_id ?? null,
+      offered_rate: form.offered_rate ? Number(form.offered_rate) : null,
+      offered_rate_unit: form.offered_rate ? rateUnit?.name ?? null : null,
+      offered_rate_unit_id: form.offered_rate ? form.offered_rate_unit_id : null,
+      vehicle_type_needed: vehicleType?.name ?? null,
+      vehicle_type_id: form.vehicle_type_id,
     });
     if (insertError) return setError(insertError.message);
+
     setSuccess(true);
     setWasLiveConnected(!!pickupCoords);
-    setPickupCoords(null);
-    setForm({ commodity: "Cotton", quantity_value: "", quantity_unit: "Munds", pickup_location: "", dropoff_location: "", offered_rate: "", vehicle_type_needed: "" });
+    resetForm();
+    setRefreshKey((k) => k + 1);
   }
 
-  const CommodityIcon = COMMODITY_ICON[form.commodity] ?? CottonIcon;
+  const selectedCommodity = commodities.find((c) => c.id === form.commodity_id);
+  const CommodityIcon = COMMODITY_ICON[selectedCommodity?.name] ?? CottonIcon;
 
   return (
-    <form onSubmit={handleSubmit} className="card max-w-xl space-y-5">
-      {success && (
-        <p className="text-green-700 text-sm flex items-center gap-2 bg-green-50 rounded-lg px-3 py-2">
-          <TruckIcon className="w-4 h-4 shrink-0" />
-          {wasLiveConnected
-            ? "Load posted — nearby matching drivers are being alerted right now."
-            : "Load posted and visible under Available Loads. Tip: pin a pickup location next time for instant driver alerts."}
-        </p>
-      )}
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+    <div className="space-y-8">
+      <form onSubmit={handleSubmit} className="card max-w-xl space-y-5">
+        {success && (
+          <p className="text-green-700 text-sm flex items-center gap-2 bg-green-50 rounded-lg px-3 py-2">
+            <TruckIcon className="w-4 h-4 shrink-0" />
+            {wasLiveConnected
+              ? "Load posted — nearby matching drivers are being alerted right now."
+              : "Load posted and visible under Available Loads. Tip: pin a pickup location next time for instant driver alerts."}
+          </p>
+        )}
+        {error && <p className="text-red-600 text-sm">{error}</p>}
 
-      <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start gap-3">
-        <span className="icon-badge bg-blue-500/10 text-blue-600 w-9 h-9 rounded-lg shrink-0">
-          <RadarIcon className="w-4 h-4" />
-        </span>
-        <p className="text-xs text-blue-900 leading-relaxed">
-          <span className="font-semibold">Live-connected to the Driver App:</span> when you pin a pickup
-          location and truck type below, any driver in &quot;Find Loads&quot; mode nearby with a matching
-          truck gets an instant ringing alert for this load — no manual searching needed on their end.
-        </p>
-      </div>
-
-      <div>
-        <label className="field-label">
-          <CommodityIcon className="w-4 h-4 text-brand-orange" /> Commodity
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          {COMMODITIES.map((c) => {
-            const Icon = COMMODITY_ICON[c];
-            const active = form.commodity === c;
-            return (
-              <button
-                type="button"
-                key={c}
-                onClick={() => setForm((f) => ({ ...f, commodity: c }))}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-sm font-semibold transition-colors ${
-                  active ? "border-brand-orange bg-brand-orangeSoft text-brand-navy" : "border-slate-200 text-slate-500"
-                }`}
-              >
-                <Icon className="w-6 h-6" />
-                {c}
-              </button>
-            );
-          })}
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="icon-badge bg-blue-500/10 text-blue-600 w-9 h-9 rounded-lg shrink-0">
+            <RadarIcon className="w-4 h-4" />
+          </span>
+          <p className="text-xs text-blue-900 leading-relaxed">
+            <span className="font-semibold">Live-connected to the Driver App:</span> when you pin a pickup
+            location and truck type below, any driver in &quot;Find Loads&quot; mode nearby with a matching
+            truck gets an instant ringing alert for this load — no manual searching needed on their end.
+          </p>
         </div>
-      </div>
-      <div>
-        <label className="field-label">
-          <ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity
-        </label>
-        <div className="flex gap-3">
-          <input
-            type="number"
+
+        {/* 1. COMMODITY — dynamic dropdown fed by Admin > Commodity */}
+        <div>
+          <label className="field-label">
+            <CommodityIcon className="w-4 h-4 text-brand-orange" /> Commodity
+          </label>
+          <select
             required
-            min="0"
-            step="0.01"
-            placeholder="Amount"
-            value={form.quantity_value}
-            onChange={(e) => setForm((f) => ({ ...f, quantity_value: e.target.value }))}
-            className="field-input flex-1"
-          />
-          <div className="flex rounded-xl bg-slate-100 p-1 shrink-0">
-            {["Munds", "Tons"].map((u) => (
-              <button
-                type="button"
-                key={u}
-                onClick={() => setForm((f) => ({ ...f, quantity_unit: u }))}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                  form.quantity_unit === u ? "bg-white shadow text-brand-navy" : "text-slate-500"
-                }`}
-              >
-                {u}
-              </button>
+            value={form.commodity_id}
+            onChange={(e) => setForm((f) => ({ ...f, commodity_id: e.target.value }))}
+            className="field-input"
+          >
+            <option value="" disabled>Select commodity…</option>
+            {commodities.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
+          </select>
+          {commodities.length === 0 && (
+            <p className="text-xs text-red-500 mt-1">No commodities configured yet — ask the admin to add some under Commodity.</p>
+          )}
+        </div>
+
+        {/* 2. QUANTITY — numeric amount + dynamic unit dropdown fed by Admin > Quantity Units */}
+        <div>
+          <label className="field-label">
+            <ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity
+          </label>
+          <div className="flex gap-3">
+            <input
+              type="number"
+              required
+              min="0"
+              step="0.01"
+              placeholder="Amount"
+              value={form.quantity_value}
+              onChange={(e) => setForm((f) => ({ ...f, quantity_value: e.target.value }))}
+              className="field-input flex-1"
+            />
+            <select
+              required
+              value={form.quantity_unit_id}
+              onChange={(e) => setForm((f) => ({ ...f, quantity_unit_id: e.target.value }))}
+              className="field-input sm:w-40 shrink-0"
+            >
+              <option value="" disabled>Unit…</option>
+              {quantityUnits.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
           </div>
         </div>
-      </div>
-      <div>
-        <label className="field-label">
-          <TruckIcon className="w-4 h-4 text-brand-orange" /> Truck Type Needed (optional)
-        </label>
-        <select
-          value={form.vehicle_type_needed}
-          onChange={(e) => setForm((f) => ({ ...f, vehicle_type_needed: e.target.value }))}
-          className="field-input"
-        >
-          <option value="">Any truck type</option>
-          {vehicleTypes.map((t) => (
-            <option key={t.id} value={t.name}>{t.name}</option>
-          ))}
-        </select>
-        <p className="text-xs text-slate-400 mt-1">Only drivers with a matching registered truck will be alerted first.</p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        {/* 3. TRUCK TYPE — now compulsory, dynamic dropdown fed by Admin > Truck Types */}
         <div>
           <label className="field-label">
-            <RouteIcon className="w-4 h-4 text-brand-orange" /> Pickup Location
+            <TruckIcon className="w-4 h-4 text-brand-orange" /> Truck Type <span className="text-red-500">*</span>
           </label>
-          <input
+          <select
+            required
+            value={form.vehicle_type_id}
+            onChange={(e) => setForm((f) => ({ ...f, vehicle_type_id: e.target.value }))}
+            className="field-input"
+          >
+            <option value="" disabled>Select truck type…</option>
+            {vehicleTypes.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-400 mt-1">Required — only drivers with a matching registered truck will be alerted.</p>
+        </div>
+
+        {/* 4 & 5. PICKUP & DROP-OFF — map-based location search with live preview */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <LocationAutocomplete
+            label="Pickup Location"
             required
             value={form.pickup_location}
-            onChange={(e) => setForm((f) => ({ ...f, pickup_location: e.target.value }))}
-            className="field-input"
+            onChangeText={(text) => setForm((f) => ({ ...f, pickup_location: text }))}
+            onSelect={({ label, lat, lng, place_id }) => {
+              setForm((f) => ({ ...f, pickup_location: label }));
+              setPickupCoords({ lat, lng, place_id });
+            }}
+            coords={pickupCoords}
           />
-          <button
-            type="button"
-            onClick={useMyLocation}
-            disabled={locating}
-            className={`mt-2 w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl border-2 transition-colors disabled:opacity-50 ${
-              pickupCoords
-                ? "border-green-500 bg-green-50 text-green-700"
-                : "border-brand-orange/40 text-brand-orange hover:bg-brand-orangeSoft"
-            }`}
-          >
-            <CrosshairIcon className="w-4 h-4" />
-            {locating ? "Locating…" : pickupCoords ? "Location pinned — drivers will be alerted" : "Pin Pickup Location (for live driver alerts)"}
-          </button>
-          {locateError && <p className="text-xs text-red-500 mt-1">{locateError}</p>}
-        </div>
-        <div>
-          <label className="field-label">
-            <RouteIcon className="w-4 h-4 text-brand-orange" /> Drop-off Location
-          </label>
-          <input
+          <LocationAutocomplete
+            label="Drop-off Location"
             required
             value={form.dropoff_location}
-            onChange={(e) => setForm((f) => ({ ...f, dropoff_location: e.target.value }))}
-            className="field-input"
+            onChangeText={(text) => setForm((f) => ({ ...f, dropoff_location: text }))}
+            onSelect={({ label, lat, lng, place_id }) => {
+              setForm((f) => ({ ...f, dropoff_location: label }));
+              setDropoffCoords({ lat, lng, place_id });
+            }}
+            coords={dropoffCoords}
           />
         </div>
-      </div>
-      <div>
-        <label className="field-label">
-          <WalletIcon className="w-4 h-4 text-brand-orange" /> Target Freight Rate (PKR, optional)
-        </label>
-        <input
-          type="number"
-          value={form.offered_rate}
-          onChange={(e) => setForm((f) => ({ ...f, offered_rate: e.target.value }))}
-          className="field-input"
+
+        {/* 6. TARGET FREIGHT — numeric amount + dynamic rate-unit dropdown */}
+        <div>
+          <label className="field-label">
+            <WalletIcon className="w-4 h-4 text-brand-orange" /> Target Freight Rate (PKR, optional)
+          </label>
+          <div className="flex gap-3">
+            <input
+              type="number"
+              placeholder="e.g. 1200"
+              value={form.offered_rate}
+              onChange={(e) => setForm((f) => ({ ...f, offered_rate: e.target.value }))}
+              className="field-input flex-1"
+            />
+            <select
+              value={form.offered_rate_unit_id}
+              onChange={(e) => setForm((f) => ({ ...f, offered_rate_unit_id: e.target.value }))}
+              className="field-input sm:w-32 shrink-0"
+            >
+              {quantityUnits.map((u) => (
+                <option key={u.id} value={u.id}>/ {u.name}</option>
+              ))}
+            </select>
+          </div>
+          {form.offered_rate && (
+            <p className="text-xs text-slate-400 mt-1">
+              PKR {form.offered_rate} / {quantityUnits.find((u) => u.id === form.offered_rate_unit_id)?.name ?? "unit"}
+            </p>
+          )}
+        </div>
+
+        <button type="submit" className="btn-orange w-full">
+          <PlusIcon className="w-4 h-4" /> Post Load
+        </button>
+      </form>
+
+      {/* POSTED LOADS — cards with Edit / Delete / View; disappear automatically
+          once a driver accepts (status leaves "open") */}
+      <PostedLoadsList merchantId={merchantId} refreshKey={refreshKey} onEdit={setEditingLoad} />
+
+      {editingLoad && (
+        <EditLoadModal
+          load={editingLoad}
+          commodities={commodities}
+          quantityUnits={quantityUnits}
+          vehicleTypes={vehicleTypes}
+          onClose={() => setEditingLoad(null)}
+          onSaved={() => {
+            setEditingLoad(null);
+            setRefreshKey((k) => k + 1);
+          }}
         />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// POSTED LOADS — active "open" load cards for the current merchant, with
+// Edit / Delete / View actions. Subscribes to Supabase Realtime so a card
+// disappears the instant a driver accepts the load (status leaves "open"),
+// without the merchant needing to refresh the page.
+// ---------------------------------------------------------------------------
+function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
+  const [loads, setLoads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [viewLoad, setViewLoad] = useState(null);
+
+  async function refresh() {
+    const { data } = await supabase
+      .from("loads")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .eq("status", "open")
+      .order("created_at", { ascending: false });
+    setLoads(data ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merchantId, refreshKey]);
+
+  // Realtime: any INSERT/UPDATE/DELETE on this merchant's loads re-syncs the
+  // list, so a card vanishes the moment `status` flips away from "open"
+  // (i.e. a driver accepted it) — see workflow requirement in the spec.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`merchant-open-loads-${merchantId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "loads", filter: `merchant_id=eq.${merchantId}` },
+        () => refresh()
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merchantId]);
+
+  async function handleDelete(id) {
+    if (!confirm("Delete this posted load? This can't be undone.")) return;
+    await supabase.from("loads").delete().eq("id", id);
+    refresh();
+  }
+
+  return (
+    <div>
+      <h3 className="font-semibold text-brand-navy mb-3">Your Posted Loads</h3>
+      {loading && <p className="text-slate-400 text-sm">Loading…</p>}
+      {!loading && loads.length === 0 && (
+        <p className="text-slate-400 text-sm flex items-center gap-2">
+          <ChartIcon className="w-4 h-4" /> No active posted loads. Once you post one above, it&apos;ll show up here as a card until a driver accepts it.
+        </p>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {loads.map((l) => {
+          const CommodityIcon = COMMODITY_ICON[l.commodity] ?? CottonIcon;
+          return (
+            <div key={l.id} className="card space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
+                    <CommodityIcon className="w-5 h-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-brand-navy truncate">
+                      {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">{l.vehicle_type_needed ?? "Any truck"}</p>
+                  </div>
+                </div>
+                <span className="badge-valid shrink-0">Open</span>
+              </div>
+
+              <p className="text-sm text-slate-500 flex items-start gap-1.5">
+                <RouteIcon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span className="truncate">{l.pickup_location} &rarr; {l.dropoff_location}</span>
+              </p>
+
+              {l.offered_rate && (
+                <p className="text-sm font-semibold text-brand-navy">
+                  PKR {l.offered_rate} / {l.offered_rate_unit ?? l.quantity_unit ?? "unit"}
+                </p>
+              )}
+
+              <div className="flex gap-2 pt-1 border-t border-slate-100">
+                <button onClick={() => setViewLoad(l)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 rounded-lg text-slate-600">
+                  <EyeIcon className="w-3.5 h-3.5" /> View
+                </button>
+                <button onClick={() => onEdit(l)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 rounded-lg text-slate-600">
+                  <EditIcon className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button onClick={() => handleDelete(l.id)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold border border-red-200 text-red-600 rounded-lg">
+                  <TrashIcon className="w-3.5 h-3.5" /> Delete
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
-      <button type="submit" className="btn-orange w-full">
-        <PlusIcon className="w-4 h-4" /> Post Load
-      </button>
-    </form>
+
+      {viewLoad && <ViewLoadModal load={viewLoad} onClose={() => setViewLoad(null)} />}
+    </div>
+  );
+}
+
+function ModalShell({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
+          <h3 className="font-semibold text-brand-navy">{title}</h3>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-slate-400">
+            <CloseIcon className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// VIEW modal — read-only full detail view of a posted load, with a
+// side-by-side pickup/drop-off map preview when coordinates are available.
+// ---------------------------------------------------------------------------
+function ViewLoadModal({ load, onClose }) {
+  return (
+    <ModalShell title="Load Details" onClose={onClose}>
+      <div className="space-y-4">
+        <DetailRow icon={BoxIcon} label="Commodity" value={load.commodity} />
+        <DetailRow icon={ScaleIcon} label="Quantity" value={`${load.quantity_value ?? load.quantity_munds} ${load.quantity_unit ?? "Munds"}`} />
+        <DetailRow icon={TruckIcon} label="Truck Type" value={load.vehicle_type_needed ?? "Any truck"} />
+        <DetailRow icon={RouteIcon} label="Pickup" value={load.pickup_location} />
+        {load.pickup_lat && <MiniMapPreview lat={load.pickup_lat} lng={load.pickup_lng} />}
+        <DetailRow icon={RouteIcon} label="Drop-off" value={load.dropoff_location} />
+        {load.dropoff_lat && <MiniMapPreview lat={load.dropoff_lat} lng={load.dropoff_lng} />}
+        {load.offered_rate && (
+          <DetailRow icon={WalletIcon} label="Target Freight" value={`PKR ${load.offered_rate} / ${load.offered_rate_unit ?? load.quantity_unit ?? "unit"}`} />
+        )}
+        <DetailRow icon={ClockIcon} label="Status" value="Open — waiting for a driver to accept" />
+      </div>
+    </ModalShell>
+  );
+}
+
+function DetailRow({ icon: Icon, label, value }) {
+  return (
+    <div>
+      <p className="text-[11px] text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+        <Icon className="w-3.5 h-3.5" /> {label}
+      </p>
+      <p className="text-sm font-semibold text-brand-navy">{value}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EDIT modal — lets the merchant correct an "open" load's details before a
+// driver accepts it. Reuses the same dynamic dropdown data already loaded
+// by the parent PostLoad form.
+// ---------------------------------------------------------------------------
+function EditLoadModal({ load, commodities, quantityUnits, vehicleTypes, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    commodity_id: load.commodity_id ?? "",
+    quantity_value: load.quantity_value ?? load.quantity_munds ?? "",
+    quantity_unit_id: load.quantity_unit_id ?? "",
+    vehicle_type_id: load.vehicle_type_id ?? "",
+    pickup_location: load.pickup_location ?? "",
+    dropoff_location: load.dropoff_location ?? "",
+    offered_rate: load.offered_rate ?? "",
+    offered_rate_unit_id: load.offered_rate_unit_id ?? "",
+  });
+  const [pickupCoords, setPickupCoords] = useState(load.pickup_lat ? { lat: load.pickup_lat, lng: load.pickup_lng, place_id: load.pickup_place_id } : null);
+  const [dropoffCoords, setDropoffCoords] = useState(load.dropoff_lat ? { lat: load.dropoff_lat, lng: load.dropoff_lng, place_id: load.dropoff_place_id } : null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+
+    const commodity = commodities.find((c) => c.id === form.commodity_id);
+    const quantityUnit = quantityUnits.find((u) => u.id === form.quantity_unit_id);
+    const vehicleType = vehicleTypes.find((v) => v.id === form.vehicle_type_id);
+    const rateUnit = quantityUnits.find((u) => u.id === form.offered_rate_unit_id);
+    const value = Number(form.quantity_value);
+
+    const { error: updateError } = await supabase
+      .from("loads")
+      .update({
+        commodity: commodity?.name ?? load.commodity,
+        commodity_id: form.commodity_id || null,
+        quantity_munds: toMunds(value, quantityUnit?.name),
+        quantity_value: value,
+        quantity_unit: quantityUnit?.name ?? load.quantity_unit,
+        quantity_unit_id: form.quantity_unit_id || null,
+        vehicle_type_needed: vehicleType?.name ?? null,
+        vehicle_type_id: form.vehicle_type_id || null,
+        pickup_location: form.pickup_location,
+        dropoff_location: form.dropoff_location,
+        pickup_lat: pickupCoords?.lat ?? load.pickup_lat ?? null,
+        pickup_lng: pickupCoords?.lng ?? load.pickup_lng ?? null,
+        pickup_place_id: pickupCoords?.place_id ?? load.pickup_place_id ?? null,
+        dropoff_lat: dropoffCoords?.lat ?? load.dropoff_lat ?? null,
+        dropoff_lng: dropoffCoords?.lng ?? load.dropoff_lng ?? null,
+        dropoff_place_id: dropoffCoords?.place_id ?? load.dropoff_place_id ?? null,
+        offered_rate: form.offered_rate ? Number(form.offered_rate) : null,
+        offered_rate_unit: form.offered_rate ? rateUnit?.name ?? null : null,
+        offered_rate_unit_id: form.offered_rate ? form.offered_rate_unit_id || null : null,
+      })
+      .eq("id", load.id)
+      .eq("status", "open"); // guard: never edit a load that's already been accepted
+
+    setSaving(false);
+    if (updateError) return setError(updateError.message);
+    onSaved();
+  }
+
+  return (
+    <ModalShell title="Edit Load" onClose={onClose}>
+      <form onSubmit={handleSave} className="space-y-4">
+        {error && <p className="text-red-600 text-sm">{error}</p>}
+
+        <div>
+          <label className="field-label"><BoxIcon className="w-4 h-4 text-brand-orange" /> Commodity</label>
+          <select required value={form.commodity_id} onChange={(e) => setForm((f) => ({ ...f, commodity_id: e.target.value }))} className="field-input">
+            {commodities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="field-label"><ChartIcon className="w-4 h-4 text-brand-orange" /> Quantity</label>
+          <div className="flex gap-3">
+            <input type="number" required min="0" step="0.01" value={form.quantity_value} onChange={(e) => setForm((f) => ({ ...f, quantity_value: e.target.value }))} className="field-input flex-1" />
+            <select required value={form.quantity_unit_id} onChange={(e) => setForm((f) => ({ ...f, quantity_unit_id: e.target.value }))} className="field-input sm:w-36 shrink-0">
+              {quantityUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="field-label"><TruckIcon className="w-4 h-4 text-brand-orange" /> Truck Type <span className="text-red-500">*</span></label>
+          <select required value={form.vehicle_type_id} onChange={(e) => setForm((f) => ({ ...f, vehicle_type_id: e.target.value }))} className="field-input">
+            <option value="" disabled>Select truck type…</option>
+            {vehicleTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+
+        <LocationAutocomplete
+          label="Pickup Location"
+          required
+          value={form.pickup_location}
+          onChangeText={(text) => setForm((f) => ({ ...f, pickup_location: text }))}
+          onSelect={({ label, lat, lng, place_id }) => {
+            setForm((f) => ({ ...f, pickup_location: label }));
+            setPickupCoords({ lat, lng, place_id });
+          }}
+          coords={pickupCoords}
+        />
+        <LocationAutocomplete
+          label="Drop-off Location"
+          required
+          value={form.dropoff_location}
+          onChangeText={(text) => setForm((f) => ({ ...f, dropoff_location: text }))}
+          onSelect={({ label, lat, lng, place_id }) => {
+            setForm((f) => ({ ...f, dropoff_location: label }));
+            setDropoffCoords({ lat, lng, place_id });
+          }}
+          coords={dropoffCoords}
+        />
+
+        <div>
+          <label className="field-label"><WalletIcon className="w-4 h-4 text-brand-orange" /> Target Freight Rate (PKR, optional)</label>
+          <div className="flex gap-3">
+            <input type="number" value={form.offered_rate} onChange={(e) => setForm((f) => ({ ...f, offered_rate: e.target.value }))} className="field-input flex-1" />
+            <select value={form.offered_rate_unit_id} onChange={(e) => setForm((f) => ({ ...f, offered_rate_unit_id: e.target.value }))} className="field-input sm:w-32 shrink-0">
+              {quantityUnits.map((u) => <option key={u.id} value={u.id}>/ {u.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button type="submit" disabled={saving} className="btn-orange flex-1 disabled:opacity-60">{saving ? "Saving…" : "Save Changes"}</button>
+          <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm border border-slate-300 rounded-xl">Cancel</button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }
 

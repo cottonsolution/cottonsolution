@@ -591,6 +591,42 @@ export function TrashIcon({ className }) {
   );
 }
 
+export function EditIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 20h4.2l10.1-10.1a2.3 2.3 0 0 0 0-3.3l-0.9-0.9a2.3 2.3 0 0 0-3.3 0L4 15.8V20z" />
+      <path d="M13.5 6.5l4 4" />
+    </svg>
+  );
+}
+
+export function MapIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M9 4.5 3.5 6.7v13L9 17.5l6 2.2 5.5-2.2v-13L15 6.7 9 4.5z" />
+      <path d="M9 4.5v13M15 6.7v13" />
+    </svg>
+  );
+}
+
+export function ArrowUpIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M12 19V5" />
+      <path d="M6 11l6-6 6 6" />
+    </svg>
+  );
+}
+
+export function ArrowDownIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M12 5v14" />
+      <path d="M6 13l6 6 6-6" />
+    </svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // DETAILED "HOW IT WORKS" ILLUSTRATIONS — flat, multi-colour character art
 // (not simple line icons) so the 3-step story reads at a glance even for

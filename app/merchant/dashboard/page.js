@@ -24,6 +24,8 @@ import {
   CloseIcon,
   LogoutIcon,
   RadarIcon,
+  ClockIcon,
+  TruckCheckIcon,
 } from "@/components/Icons";
 
 const COMMODITIES = ["Cotton", "Wheat", "Rapeseed", "Maize", "Rice", "Sugarcane", "Other"];
@@ -491,9 +493,20 @@ function MerchantProfile({ userId, initialProfile }) {
   );
 }
 
+// Maps each shipment-status tab to the underlying `loads.status` value(s)
+// it should include. "Load On Way" also catches "delivered" so completed
+// trips don't just disappear from the merchant's view.
+const SHIPMENT_TABS = [
+  { label: "Waiting for Truck", statuses: ["open"], icon: ClockIcon, from: "#f59e0b", to: "#b45309" },
+  { label: "Load Accepted", statuses: ["assigned"], icon: ShieldCheckIcon, from: "#38bdf8", to: "#0369a1" },
+  { label: "Load On Way", statuses: ["in_transit", "delivered"], icon: TruckCheckIcon, from: "#4ade80", to: "#15803d" },
+];
+
 function ActiveShipments({ merchantId }) {
   const [loads, setLoads] = useState([]);
   const [biltyMap, setBiltyMap] = useState({});
+  const [vehicleMap, setVehicleMap] = useState({});
+  const [shipmentTab, setShipmentTab] = useState(SHIPMENT_TABS[0].label);
 
   useEffect(() => {
     supabase
@@ -502,50 +515,119 @@ function ActiveShipments({ merchantId }) {
       .eq("merchant_id", merchantId)
       .order("created_at", { ascending: false })
       .then(async ({ data }) => {
-        setLoads(data ?? []);
-        const ids = (data ?? []).map((l) => l.id);
-        if (ids.length) {
-          const { data: biltys } = await supabase.from("biltys").select("*").in("load_id", ids);
-          const map = {};
-          (biltys ?? []).forEach((b) => (map[b.load_id] = b));
-          setBiltyMap(map);
+        const loadRows = data ?? [];
+        setLoads(loadRows);
+
+        const loadIds = loadRows.map((l) => l.id);
+        if (loadIds.length) {
+          const { data: biltys } = await supabase.from("biltys").select("*").in("load_id", loadIds);
+          const bMap = {};
+          (biltys ?? []).forEach((b) => (bMap[b.load_id] = b));
+          setBiltyMap(bMap);
+        }
+
+        const vehicleIds = [...new Set(loadRows.map((l) => l.assigned_vehicle_id).filter(Boolean))];
+        if (vehicleIds.length) {
+          const { data: vehicles } = await supabase.from("vehicles").select("*").in("id", vehicleIds);
+          const vMap = {};
+          (vehicles ?? []).forEach((v) => (vMap[v.id] = v));
+          setVehicleMap(vMap);
         }
       });
   }, [merchantId]);
 
+  const counts = SHIPMENT_TABS.reduce((acc, tab) => {
+    acc[tab.label] = loads.filter((l) => tab.statuses.includes(l.status)).length;
+    return acc;
+  }, {});
+  const activeStatuses = SHIPMENT_TABS.find((t) => t.label === shipmentTab)?.statuses ?? [];
+  const visibleLoads = loads.filter((l) => activeStatuses.includes(l.status));
+
   return (
-    <div className="space-y-3">
-      {loads.length === 0 && (
-        <p className="text-slate-400 text-sm flex items-center gap-2">
-          <ChartIcon className="w-4 h-4" /> No loads posted yet.
-        </p>
-      )}
-      {loads.map((l) => {
-        const CommodityIcon = COMMODITY_ICON[l.commodity] ?? CottonIcon;
-        return (
-          <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
-                <CommodityIcon className="w-5 h-5" />
-              </span>
-              <div>
-                <p className="font-semibold text-brand-navy">
-                  {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
-                </p>
-                <p className="text-sm text-slate-500 flex items-center gap-1.5">
-                  <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
-                </p>
+    <div>
+      {/* Status tabs */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        {SHIPMENT_TABS.map((tab) => (
+          <button
+            key={tab.label}
+            onClick={() => setShipmentTab(tab.label)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 ${
+              shipmentTab === tab.label ? "bg-white shadow-card text-brand-navy" : "bg-slate-100 text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <span className="icon-tile w-7 h-7 rounded-lg" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+              <tab.icon className="w-3.5 h-3.5 text-white" />
+            </span>
+            {tab.label}
+            <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${shipmentTab === tab.label ? "bg-brand-orangeSoft text-brand-orange" : "bg-slate-200 text-slate-500"}`}>
+              {counts[tab.label] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Cards list */}
+      <div className="space-y-3">
+        {visibleLoads.length === 0 && (
+          <p className="text-slate-400 text-sm flex items-center gap-2">
+            <ChartIcon className="w-4 h-4" /> No loads in this stage right now.
+          </p>
+        )}
+        {visibleLoads.map((l) => {
+          const CommodityIcon = COMMODITY_ICON[l.commodity] ?? CottonIcon;
+          const vehicle = l.assigned_vehicle_id ? vehicleMap[l.assigned_vehicle_id] : null;
+          return (
+            <div key={l.id} className="card space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
+                    <CommodityIcon className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <p className="font-semibold text-brand-navy">
+                      {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
+                    </p>
+                    <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                      <RouteIcon className="w-3.5 h-3.5 shrink-0" /> {l.pickup_location} &rarr; {l.dropoff_location}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
+                  {biltyMap[l.id] && <span className="text-xs text-slate-500">Bilty: {biltyMap[l.id].bilty_no}</span>}
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
-              {biltyMap[l.id] && (
-                <span className="text-xs text-slate-500">Bilty: {biltyMap[l.id].bilty_no}</span>
+
+              {/* Vehicle & driver details — shown once a truck has accepted the load */}
+              {vehicle ? (
+                <div className="border-t border-slate-100 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <VehicleDetail icon={TruckIcon} label="Vehicle No" value={vehicle.vehicle_no} />
+                  <VehicleDetail icon={TruckCheckIcon} label="Vehicle Type" value={vehicle.vehicle_type || "—"} />
+                  <VehicleDetail icon={UserIcon} label="Driver" value={vehicle.driver_name} />
+                  <VehicleDetail icon={PhoneIcon} label="Mobile" value={vehicle.mobile_no} />
+                </div>
+              ) : (
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <ClockIcon className="w-3.5 h-3.5" /> Waiting for a verified driver to accept this load.
+                  </p>
+                </div>
               )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VehicleDetail({ icon: Icon, label, value }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] text-slate-400 uppercase tracking-wide flex items-center gap-1">
+        <Icon className="w-3 h-3" /> {label}
+      </p>
+      <p className="text-sm font-semibold text-brand-navy truncate">{value}</p>
     </div>
   );
 }

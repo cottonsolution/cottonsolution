@@ -6,6 +6,34 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { TruckIcon } from "@/components/Icons";
 
+// Leaflet calls L.DomEvent.disableClickPropagation on every Popup's
+// container so clicks inside it don't pan/zoom or close the map — but that
+// also stops the click from ever bubbling up to React's root listener,
+// which is how React's onClick normally gets triggered. The result: a
+// plain <button onClick={...}> inside a Popup silently does nothing.
+// Fix: attach a real, native click listener straight to the button via a
+// ref, which fires before propagation is stopped further up the tree.
+function AcceptButton({ onClick }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const handler = (e) => {
+      e.stopPropagation();
+      onClick();
+    };
+    el.addEventListener("click", handler);
+    return () => el.removeEventListener("click", handler);
+  }, [onClick]);
+
+  return (
+    <button ref={ref} type="button" className="btn-orange w-full text-xs py-2">
+      <TruckIcon className="w-3.5 h-3.5" /> Accept Load
+    </button>
+  );
+}
+
 const PAKISTAN_CENTER = { lat: 30.1575, lng: 71.5249 }; // roughly Multan — sane default before GPS locks on
 
 // Custom pin markers built from inline SVG (divIcon) so we never depend on
@@ -78,12 +106,7 @@ export default function DriverMap({ driverPosition, loads = [], onAccept, radius
                 </p>
                 <p className="text-xs text-brand-orange font-semibold mb-2">{load.distance_km} km away</p>
                 {load.offered_rate && <p className="text-xs text-slate-600 mb-2">PKR {load.offered_rate}</p>}
-                <button
-                  onClick={() => onAccept?.(load)}
-                  className="btn-orange w-full text-xs py-2"
-                >
-                  <TruckIcon className="w-3.5 h-3.5" /> Accept Load
-                </button>
+                <AcceptButton onClick={() => onAccept?.(load)} />
               </div>
             </Popup>
           </Marker>

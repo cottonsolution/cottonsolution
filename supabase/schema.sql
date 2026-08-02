@@ -206,6 +206,10 @@ create table if not exists public.loads (
   vehicle_type_needed text,             -- required truck category — used to match drivers in Search mode
   offered_rate        numeric,          -- Target Freight Rate (PKR)
   status              text default 'open' check (status in ('open', 'assigned', 'in_transit', 'delivered', 'cancelled')),
+  -- Granular driver-facing progress (1-8) shown on the Work Mode tracking bar.
+  -- 0 = not yet accepted. Kept alongside `status` (which stays coarse for
+  -- merchant tab filtering and the nearby-loads matching RPC).
+  trip_stage           smallint default 0 check (trip_stage between 0 and 8),
   assigned_vehicle_id uuid references public.vehicles (id),
   created_at          timestamptz default now()
 );

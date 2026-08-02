@@ -80,6 +80,27 @@ export function LockIcon({ className }) {
   );
 }
 
+export function BoxIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M3.5 8l8.5-4.5L20.5 8v8L12 20.5 3.5 16z" />
+      <path d="M3.5 8l8.5 4.5L20.5 8" />
+      <path d="M12 12.5V20.5" />
+    </svg>
+  );
+}
+
+export function UnloadIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M3.5 8l8.5-4.5L20.5 8v8L12 20.5 3.5 16z" />
+      <path d="M3.5 8l8.5 4.5L20.5 8" />
+      <path d="M12 12.5V17" />
+      <path d="M9.5 14.5L12 17l2.5-2.5" />
+    </svg>
+  );
+}
+
 export function DocumentCheckIcon({ className }) {
   return (
     <svg className={className} {...base}>

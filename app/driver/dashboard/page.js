@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
 import { useLiveLocation } from "@/lib/useLiveLocation";
 import { haversineKm } from "@/lib/distance";
+import { statusForStage, effectiveStage, stageMeta, TRIP_STAGES } from "@/lib/tripStages";
 import {
   TruckIcon,
   GridIcon,
@@ -96,10 +97,12 @@ export default function DriverDashboardPage() {
   }
   useEffect(() => { refreshWorkLoads(); }, [myVehicle]);
 
-  async function advanceLoadStatus(load) {
-    const next = load.status === "assigned" ? "in_transit" : load.status === "in_transit" ? "delivered" : load.status;
-    await supabase.from("loads").update({ status: next }).eq("id", load.id);
-    refreshWorkLoads();
+  async function advanceTripStage(load, nextStage) {
+    await supabase
+      .from("loads")
+      .update({ trip_stage: nextStage, status: statusForStage(nextStage) })
+      .eq("id", load.id);
+    await refreshWorkLoads();
   }
 
   // ---- Search Mode: nearby matching open loads, refreshed periodically ----
@@ -157,7 +160,7 @@ export default function DriverDashboardPage() {
       bid_amount: load.offered_rate ?? 0,
       status: "accepted",
     });
-    await supabase.from("loads").update({ status: "assigned", assigned_vehicle_id: myVehicle.id }).eq("id", load.id);
+    await supabase.from("loads").update({ status: "assigned", trip_stage: 1, assigned_vehicle_id: myVehicle.id }).eq("id", load.id);
     setNearbyLoads((prev) => prev.filter((l) => l.id !== load.id));
     setAlertLoad(null);
     await refreshWorkLoads();
@@ -290,15 +293,25 @@ export default function DriverDashboardPage() {
               mode={mode}
               myVehicle={myVehicle}
               workLoads={workLoads}
-              onAdvance={advanceLoadStatus}
+              onAdvanceStage={advanceTripStage}
               position={position}
               locationError={locationError}
               nearbyLoads={nearbyLoads}
               onAccept={acceptLoad}
             />
           )}
-          {activeTab === "Available Loads" && <AvailableLoads driverId={user.id} vehicle={myVehicle} onAccepted={refreshWorkLoads} />}
-          {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} onAdvance={advanceLoadStatus} />}
+          {activeTab === "Available Loads" && (
+            <AvailableLoads
+              driverId={user.id}
+              vehicle={myVehicle}
+              onAccepted={async () => {
+                await refreshWorkLoads();
+                handleModeChange("working");
+                setActiveTab("Dashboard");
+              }}
+            />
+          )}
+          {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} onAdvanceStage={advanceTripStage} />}
           {activeTab === "My Truck" && <TruckProfile vehicle={myVehicle} onUpdated={refreshVehicle} />}
         </div>
       </div>
@@ -306,7 +319,7 @@ export default function DriverDashboardPage() {
   );
 }
 
-function DashboardHome({ mode, myVehicle, workLoads, onAdvance, position, locationError, nearbyLoads, onAccept }) {
+function DashboardHome({ mode, myVehicle, workLoads, onAdvanceStage, position, locationError, nearbyLoads, onAccept }) {
   if (!myVehicle) {
     return (
       <div className="card text-center py-12">
@@ -325,7 +338,7 @@ function DashboardHome({ mode, myVehicle, workLoads, onAdvance, position, locati
           <span className="icon-badge bg-green-500/10 text-green-600 w-9 h-9 rounded-lg"><TruckIcon className="w-4 h-4" /></span>
           <h3 className="font-bold text-brand-navy">Work Mode — Live Status</h3>
         </div>
-        <WorkTaskBar loads={workLoads} onAdvance={onAdvance} />
+        <WorkTaskBar loads={workLoads} onAdvanceStage={onAdvanceStage} />
       </div>
     );
   }
@@ -404,7 +417,7 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
     });
 
     if (accept) {
-      await supabase.from("loads").update({ status: "assigned", assigned_vehicle_id: vehicle.id }).eq("id", load.id);
+      await supabase.from("loads").update({ status: "assigned", trip_stage: 1, assigned_vehicle_id: vehicle.id }).eq("id", load.id);
       setMessage(`Load accepted at PKR ${amount}. A digital bilty has been generated.`);
       refresh();
       onAccepted?.();
@@ -581,7 +594,7 @@ function VehicleDetail({ icon: Icon, label, value }) {
   );
 }
 
-function MyTrips({ vehicle, onAdvance }) {
+function MyTrips({ vehicle, onAdvanceStage }) {
   const [loads, setLoads] = useState([]);
 
   async function refresh() {
@@ -595,8 +608,10 @@ function MyTrips({ vehicle, onAdvance }) {
   }
   useEffect(() => { refresh(); }, [vehicle]);
 
-  async function advanceStatus(load) {
-    await onAdvance(load);
+  async function advanceOneStage(load) {
+    const stage = effectiveStage(load);
+    if (stage >= 8) return;
+    await onAdvanceStage(load, stage + 1);
     refresh();
   }
 
@@ -607,30 +622,37 @@ function MyTrips({ vehicle, onAdvance }) {
           <RouteIcon className="w-4 h-4" /> No active trips yet.
         </p>
       )}
-      {loads.map((l) => (
-        <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
-              <TruckIcon className="w-5 h-5" />
-            </span>
-            <div>
-              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}</p>
-              <p className="text-sm text-slate-500 flex items-center gap-1.5">
-                <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
-              </p>
+      {loads.map((l) => {
+        const stage = effectiveStage(l);
+        const meta = stageMeta(stage);
+        const StageIcon = meta.icon;
+        return (
+          <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+                <TruckIcon className="w-5 h-5" />
+              </span>
+              <div>
+                <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}</p>
+                <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                  <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 badge-valid">
+                <StageIcon className="w-3.5 h-3.5" /> Step {stage}/8 — {meta.label}
+              </span>
+              {stage < 8 && (
+                <button onClick={() => advanceOneStage(l)} className="btn-orange px-4 py-2 text-sm">
+                  <TruckCheckIcon className="w-4 h-4" />
+                  Mark &quot;{stageMeta(stage + 1).label}&quot;
+                </button>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
-            {l.status !== "delivered" && (
-              <button onClick={() => advanceStatus(l)} className="btn-orange px-4 py-2 text-sm">
-                <TruckCheckIcon className="w-4 h-4" />
-                {l.status === "assigned" ? "Start Trip" : "Mark Delivered"}
-              </button>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

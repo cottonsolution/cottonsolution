@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/useUser";
 import VehicleSearch from "@/components/VehicleSearch";
+import { effectiveStage, stageMeta } from "@/lib/tripStages";
 import {
   TruckIcon,
   PlusIcon,
@@ -593,7 +594,13 @@ function ActiveShipments({ merchantId }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
+                  {l.assigned_vehicle_id ? (
+                    <span className="badge-valid">
+                      Step {effectiveStage(l)}/8 — {stageMeta(effectiveStage(l)).label}
+                    </span>
+                  ) : (
+                    <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
+                  )}
                   {biltyMap[l.id] && <span className="text-xs text-slate-500">Bilty: {biltyMap[l.id].bilty_no}</span>}
                 </div>
               </div>

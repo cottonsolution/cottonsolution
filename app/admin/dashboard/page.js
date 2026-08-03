@@ -34,7 +34,9 @@ import {
   EditIcon,
   ArrowUpIcon,
   ArrowDownIcon,
+  ChatIcon,
 } from "@/components/Icons";
+import ChatHub from "@/components/chat/ChatHub";
 
 // Each tab gets its own gradient (via CSS vars) so the sidebar icon tiles
 // read as distinct, "semi-realistic" colour-coded shortcuts rather than
@@ -46,6 +48,7 @@ const TABS = [
   { label: "Commodity", icon: BoxIcon, from: "#facc15", to: "#a16207" },
   { label: "Quantity Units", icon: ScaleIcon, from: "#2dd4bf", to: "#0f766e" },
   { label: "Truck Types", icon: TruckIcon, from: "#4ade80", to: "#15803d" },
+  { label: "Messages", icon: ChatIcon, from: "#f472b6", to: "#be185d" },
   { label: "Contact", icon: MailIcon, from: "#f472b6", to: "#be185d" },
   { label: "Expiry Alerts", icon: BellIcon, from: "#f87171", to: "#b91c1c" },
 ];
@@ -172,6 +175,7 @@ export default function AdminDashboardPage() {
           {activeTab === "Commodity" && <CommodityManager />}
           {activeTab === "Quantity Units" && <QuantityUnitsManager />}
           {activeTab === "Truck Types" && <VehicleTypesManager />}
+          {activeTab === "Messages" && <ChatHub userId={user.id} role="admin" />}
           {activeTab === "Contact" && <ContactManager />}
           {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
         </div>

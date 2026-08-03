@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseBrowserClient";
 import { useUser } from "@/lib/useUser";
 import { useLiveLocation } from "@/lib/useLiveLocation";
 import { haversineKm } from "@/lib/distance";
-import { statusForStage, effectiveStage, stageMeta, TRIP_STAGES } from "@/lib/tripStages";
+import { effectiveStage, stageMeta, MAX_STAGE } from "@/lib/tripStages";
 import {
   TruckIcon,
   GridIcon,
@@ -24,10 +24,14 @@ import {
   MapPinIcon,
   IdCardIcon,
   CheckCircleIcon,
+  ChatIcon,
 } from "@/components/Icons";
 import ModeSwitcher from "@/components/driver/ModeSwitcher";
-import WorkTaskBar from "@/components/driver/WorkTaskBar";
+import WorkTaskBar, { TripTrackerModal } from "@/components/driver/WorkTaskBar";
 import LoadAlertOverlay from "@/components/driver/LoadAlertOverlay";
+import ChatHub from "@/components/chat/ChatHub";
+import { subscribeToPush } from "@/lib/pushClient";
+import { notifyMerchantLoadAccepted } from "@/lib/shipmentActions";
 
 // Leaflet touches `window`, so the map can only render on the client —
 // load it lazily with SSR turned off instead of at the top of the bundle.
@@ -39,6 +43,7 @@ const TABS = [
   { label: "Dashboard", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
   { label: "Available Loads", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
   { label: "My Trips", icon: RouteIcon, from: "#4ade80", to: "#15803d" },
+  { label: "Messages", icon: ChatIcon, from: "#f472b6", to: "#be185d" },
   { label: "My Truck", icon: IdCardIcon, from: "#fb923c", to: "#c2410c" },
 ];
 
@@ -71,6 +76,12 @@ export default function DriverDashboardPage() {
   }
   useEffect(() => { refreshVehicle(); }, [user]);
 
+  // Background/lock-screen push alerts (new load nearby, load documentation
+  // ready, arrival approved, new chat message) — safe to call repeatedly.
+  useEffect(() => {
+    if (user) subscribeToPush(user.id);
+  }, [user]);
+
   const { position, error: locationError } = useLiveLocation(myVehicle?.id, mode === "working" || mode === "searching");
 
   async function handleModeChange(nextMode) {
@@ -97,14 +108,21 @@ export default function DriverDashboardPage() {
   }
   useEffect(() => { refreshWorkLoads(); }, [myVehicle]);
 
-  async function advanceTripStage(load, nextStage) {
-    const { error: stageError } = await supabase
-      .from("loads")
-      .update({ trip_stage: nextStage, status: statusForStage(nextStage) })
-      .eq("id", load.id);
-    if (stageError) alert(`Could not update trip status: ${stageError.message}`);
-    await refreshWorkLoads();
-  }
+  // Keep the Work Mode task bar live — the moment the merchant submits a
+  // Bilty or approves an arrival, this driver's dashboard updates itself.
+  useEffect(() => {
+    if (!myVehicle) return undefined;
+    const channel = supabase
+      .channel(`driver-loads-${myVehicle.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "loads", filter: `assigned_vehicle_id=eq.${myVehicle.id}` },
+        () => refreshWorkLoads()
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myVehicle]);
 
   // ---- Search Mode: nearby matching open loads, refreshed periodically ----
   async function refreshNearbyLoads() {
@@ -185,6 +203,7 @@ export default function DriverDashboardPage() {
     await refreshWorkLoads();
     handleModeChange("working");
     setActiveTab("Dashboard");
+    notifyMerchantLoadAccepted({ load: updated, merchantId: updated.merchant_id, vehicle: myVehicle });
   }
 
   async function handleLogout() {
@@ -312,7 +331,8 @@ export default function DriverDashboardPage() {
               mode={mode}
               myVehicle={myVehicle}
               workLoads={workLoads}
-              onAdvanceStage={advanceTripStage}
+              driverId={user.id}
+              onChanged={refreshWorkLoads}
               position={position}
               locationError={locationError}
               nearbyLoads={nearbyLoads}
@@ -330,7 +350,8 @@ export default function DriverDashboardPage() {
               }}
             />
           )}
-          {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} onAdvanceStage={advanceTripStage} />}
+          {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} driverId={user.id} />}
+          {activeTab === "Messages" && <ChatHub userId={user.id} role="driver" vehicleId={myVehicle?.id} />}
           {activeTab === "My Truck" && <TruckProfile vehicle={myVehicle} onUpdated={refreshVehicle} />}
         </div>
       </div>
@@ -338,7 +359,7 @@ export default function DriverDashboardPage() {
   );
 }
 
-function DashboardHome({ mode, myVehicle, workLoads, onAdvanceStage, position, locationError, nearbyLoads, onAccept }) {
+function DashboardHome({ mode, myVehicle, workLoads, driverId, onChanged, position, locationError, nearbyLoads, onAccept }) {
   if (!myVehicle) {
     return (
       <div className="card text-center py-12">
@@ -357,7 +378,7 @@ function DashboardHome({ mode, myVehicle, workLoads, onAdvanceStage, position, l
           <span className="icon-badge bg-green-500/10 text-green-600 w-9 h-9 rounded-lg"><TruckIcon className="w-4 h-4" /></span>
           <h3 className="font-bold text-brand-navy">Work Mode — Live Status</h3>
         </div>
-        <WorkTaskBar loads={workLoads} onAdvanceStage={onAdvanceStage} />
+        <WorkTaskBar loads={workLoads} driverId={driverId} onChanged={onChanged} />
       </div>
     );
   }
@@ -630,8 +651,9 @@ function VehicleDetail({ icon: Icon, label, value }) {
   );
 }
 
-function MyTrips({ vehicle, onAdvanceStage }) {
+function MyTrips({ vehicle, driverId }) {
   const [loads, setLoads] = useState([]);
+  const [openLoad, setOpenLoad] = useState(null);
 
   async function refresh() {
     if (!vehicle) return;
@@ -644,12 +666,19 @@ function MyTrips({ vehicle, onAdvanceStage }) {
   }
   useEffect(() => { refresh(); }, [vehicle]);
 
-  async function advanceOneStage(load) {
-    const stage = effectiveStage(load);
-    if (stage >= 8) return;
-    await onAdvanceStage(load, stage + 1);
-    refresh();
-  }
+  useEffect(() => {
+    if (!vehicle) return undefined;
+    const channel = supabase
+      .channel(`my-trips-${vehicle.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "loads", filter: `assigned_vehicle_id=eq.${vehicle.id}` },
+        () => refresh()
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicle]);
 
   return (
     <div className="space-y-3">
@@ -663,7 +692,11 @@ function MyTrips({ vehicle, onAdvanceStage }) {
         const meta = stageMeta(stage);
         const StageIcon = meta.icon;
         return (
-          <div key={l.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <button
+            key={l.id}
+            onClick={() => setOpenLoad(l)}
+            className="w-full text-left card flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:ring-2 hover:ring-brand-orange/40 transition-shadow"
+          >
             <div className="flex items-center gap-3">
               <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
                 <TruckIcon className="w-5 h-5" />
@@ -675,20 +708,24 @@ function MyTrips({ vehicle, onAdvanceStage }) {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 badge-valid">
-                <StageIcon className="w-3.5 h-3.5" /> Step {stage}/8 — {meta.label}
-              </span>
-              {stage < 8 && (
-                <button onClick={() => advanceOneStage(l)} className="btn-orange px-4 py-2 text-sm">
-                  <TruckCheckIcon className="w-4 h-4" />
-                  Mark &quot;{stageMeta(stage + 1).label}&quot;
-                </button>
-              )}
-            </div>
-          </div>
+            <span className="inline-flex items-center gap-1.5 badge-valid shrink-0">
+              <StageIcon className="w-3.5 h-3.5" /> Step {stage}/{MAX_STAGE} — {meta.label}
+            </span>
+          </button>
         );
       })}
+
+      {openLoad && (
+        <TripTrackerModal
+          load={openLoad}
+          driverId={driverId}
+          onClose={() => setOpenLoad(null)}
+          onChanged={async (fresh) => {
+            setOpenLoad(fresh);
+            await refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

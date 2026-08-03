@@ -618,6 +618,62 @@ export function ArrowUpIcon({ className }) {
   );
 }
 
+export function ChatIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H10l-4.5 4v-4h-1A2.5 2.5 0 0 1 2 13.5v0" />
+      <path d="M8 8.5h8M8 11.5h5" />
+    </svg>
+  );
+}
+
+export function SendIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 12l16-8-6.5 16-3-6.5L4 12z" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M12 4v11" />
+      <path d="M7.5 11.5 12 16l4.5-4.5" />
+      <path d="M5 19.5h14" />
+    </svg>
+  );
+}
+
+export function PrintIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M7 8.5V4h10v4.5" />
+      <rect x="5" y="8.5" width="14" height="7" rx="1.5" />
+      <path d="M7 14.5h10V20H7z" />
+    </svg>
+  );
+}
+
+export function CameraIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" />
+      <circle cx="12" cy="12.5" r="3.2" />
+    </svg>
+  );
+}
+
+export function BellRingIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10z" />
+      <path d="M10 18.5a2 2 0 0 0 4 0" />
+      <path d="M4 6l-1.5-1.5M20 6l1.5-1.5" />
+    </svg>
+  );
+}
+
 export function ArrowDownIcon({ className }) {
   return (
     <svg className={className} {...base}>

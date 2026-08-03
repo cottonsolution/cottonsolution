@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseBrowserClient";
 import { useUser } from "@/lib/useUser";
 import VehicleSearch from "@/components/VehicleSearch";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
-import { effectiveStage, stageMeta } from "@/lib/tripStages";
+import { effectiveStage, stageMeta, MAX_STAGE, TRIP_STAGES } from "@/lib/tripStages";
 import {
   TruckIcon,
   PlusIcon,
@@ -33,7 +33,19 @@ import {
   TrashIcon,
   BoxIcon,
   ScaleIcon,
+  ChatIcon,
+  UploadIcon,
+  CheckCircleIcon,
+  DocumentCheckIcon,
 } from "@/components/Icons";
+import ChatHub from "@/components/chat/ChatHub";
+import LoadChatButton from "@/components/chat/LoadChatButton";
+import LoadAcceptedAlert from "@/components/merchant/LoadAcceptedAlert";
+import BiltyModal from "@/components/BiltyModal";
+import { subscribeToPush } from "@/lib/pushClient";
+import { submitBilty, approveArrival } from "@/lib/shipmentActions";
+
+const LiveVehicleMap = dynamic(() => import("@/components/merchant/LiveVehicleMap"), { ssr: false });
 
 const MiniMapPreview = dynamic(() => import("@/components/MiniMapPreview"), { ssr: false });
 
@@ -45,6 +57,7 @@ const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIc
 const TABS = [
   { label: "Post a Load", short: "Post Load", icon: PlusIcon, from: "#fb923c", to: "#c2410c" },
   { label: "Active Shipments", short: "Shipments", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
+  { label: "Messages", short: "Chat", icon: ChatIcon, from: "#f472b6", to: "#be185d" },
   { label: "Verify a Vehicle", short: "Verify", icon: ShieldCheckIcon, from: "#4ade80", to: "#15803d" },
   { label: "My Profile", short: "Profile", icon: BuildingIcon, from: "#a78bfa", to: "#6d28d9" },
 ];
@@ -53,12 +66,39 @@ export default function MerchantDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
+  const [acceptedAlert, setAcceptedAlert] = useState(null); // { load, vehicle }
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "merchant")) {
       router.push("/login");
     }
   }, [loading, user, profile, router]);
+
+  // Background/lock-screen push alerts (driver accepted, documentation
+  // ready, truck arrived, new chat message) — safe to call repeatedly.
+  useEffect(() => {
+    if (user) subscribeToPush(user.id);
+  }, [user]);
+
+  // Call-style ring the instant a driver accepts one of this merchant's
+  // loads — the merchant-side equivalent of the driver's incoming-load ring.
+  useEffect(() => {
+    if (!user) return undefined;
+    const channel = supabase
+      .channel(`merchant-load-accepted-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "loads", filter: `merchant_id=eq.${user.id}` },
+        async ({ new: updated, old: previous }) => {
+          if (previous.status === "open" && updated.status === "assigned" && updated.assigned_vehicle_id) {
+            const { data: vehicle } = await supabase.from("vehicles").select("*").eq("id", updated.assigned_vehicle_id).maybeSingle();
+            setAcceptedAlert({ load: updated, vehicle });
+          }
+        }
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -71,6 +111,17 @@ export default function MerchantDashboardPage() {
 
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 pb-24 lg:pb-12">
+      {acceptedAlert && (
+        <LoadAcceptedAlert
+          load={acceptedAlert.load}
+          vehicle={acceptedAlert.vehicle}
+          onDismiss={() => {
+            setAcceptedAlert(null);
+            setActiveTab("Active Shipments");
+          }}
+        />
+      )}
+
       <div className="flex items-center justify-between gap-3 mb-4 sm:mb-8">
         <div className="flex items-center gap-3 min-w-0">
           <span className="icon-tile w-10 h-10 sm:w-12 sm:h-12 shrink-0" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
@@ -129,6 +180,7 @@ export default function MerchantDashboardPage() {
 
           {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
           {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} />}
+          {activeTab === "Messages" && <ChatHub userId={user.id} role="merchant" />}
           {activeTab === "Verify a Vehicle" && <VehicleSearch />}
           {activeTab === "My Profile" && <MerchantProfile userId={user.id} initialProfile={profile} />}
         </div>
@@ -141,7 +193,7 @@ export default function MerchantDashboardPage() {
         className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-100"
         style={{ boxShadow: "0 -4px 16px rgba(14, 59, 46, 0.08)", paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.label;
             return (
@@ -868,71 +920,86 @@ function MerchantProfile({ userId, initialProfile }) {
 // Maps each shipment-status tab to the underlying `loads.status` value(s)
 // it should include. "Load On Way" also catches "delivered" so completed
 // trips don't just disappear from the merchant's view.
-const SHIPMENT_TABS = [
-  { label: "Waiting for Truck", statuses: ["open"], icon: ClockIcon, from: "#f59e0b", to: "#b45309" },
-  { label: "Load Accepted", statuses: ["assigned"], icon: ShieldCheckIcon, from: "#38bdf8", to: "#0369a1" },
-  { label: "Load On Way", statuses: ["in_transit", "delivered"], icon: TruckCheckIcon, from: "#4ade80", to: "#15803d" },
-];
-
 function ActiveShipments({ merchantId }) {
   const [loads, setLoads] = useState([]);
   const [biltyMap, setBiltyMap] = useState({});
   const [vehicleMap, setVehicleMap] = useState({});
-  const [shipmentTab, setShipmentTab] = useState(SHIPMENT_TABS[0].label);
+  const [shipmentStage, setShipmentStage] = useState(1); // default view: loads with a driver assigned onward
 
-  useEffect(() => {
-    supabase
+  async function refresh() {
+    const { data } = await supabase
       .from("loads")
       .select("*")
       .eq("merchant_id", merchantId)
-      .order("created_at", { ascending: false })
-      .then(async ({ data }) => {
-        const loadRows = data ?? [];
-        setLoads(loadRows);
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: false });
+    const loadRows = data ?? [];
+    setLoads(loadRows);
 
-        const loadIds = loadRows.map((l) => l.id);
-        if (loadIds.length) {
-          const { data: biltys } = await supabase.from("biltys").select("*").in("load_id", loadIds);
-          const bMap = {};
-          (biltys ?? []).forEach((b) => (bMap[b.load_id] = b));
-          setBiltyMap(bMap);
-        }
+    const loadIds = loadRows.map((l) => l.id);
+    if (loadIds.length) {
+      const { data: biltys } = await supabase.from("biltys").select("*").in("load_id", loadIds);
+      const bMap = {};
+      (biltys ?? []).forEach((b) => (bMap[b.load_id] = b));
+      setBiltyMap(bMap);
+    }
 
-        const vehicleIds = [...new Set(loadRows.map((l) => l.assigned_vehicle_id).filter(Boolean))];
-        if (vehicleIds.length) {
-          const { data: vehicles } = await supabase.from("vehicles").select("*").in("id", vehicleIds);
-          const vMap = {};
-          (vehicles ?? []).forEach((v) => (vMap[v.id] = v));
-          setVehicleMap(vMap);
-        }
-      });
+    const vehicleIds = [...new Set(loadRows.map((l) => l.assigned_vehicle_id).filter(Boolean))];
+    if (vehicleIds.length) {
+      const { data: vehicles } = await supabase.from("vehicles").select("*").in("id", vehicleIds);
+      const vMap = {};
+      (vehicles ?? []).forEach((v) => (vMap[v.id] = v));
+      setVehicleMap(vMap);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantId]);
 
-  const counts = SHIPMENT_TABS.reduce((acc, tab) => {
-    acc[tab.label] = loads.filter((l) => tab.statuses.includes(l.status)).length;
+  // Live updates — a merchant watching this tab sees the step change the
+  // instant the driver (or they themselves, from another tab) advances it.
+  useEffect(() => {
+    const loadsChannel = supabase
+      .channel(`merchant-shipments-${merchantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "loads", filter: `merchant_id=eq.${merchantId}` }, () => refresh())
+      .subscribe();
+    const biltysChannel = supabase
+      .channel(`merchant-biltys-${merchantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "biltys" }, () => refresh())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(loadsChannel);
+      supabase.removeChannel(biltysChannel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merchantId]);
+
+  const counts = TRIP_STAGES.reduce((acc, tab) => {
+    acc[tab.value] = loads.filter((l) => effectiveStage(l) === tab.value).length;
     return acc;
   }, {});
-  const activeStatuses = SHIPMENT_TABS.find((t) => t.label === shipmentTab)?.statuses ?? [];
-  const visibleLoads = loads.filter((l) => activeStatuses.includes(l.status));
+  const visibleLoads = loads.filter((l) => effectiveStage(l) === shipmentStage);
 
   return (
     <div>
-      {/* Status tabs */}
+      {/* Step tabs — identical 6 steps the driver sees */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {SHIPMENT_TABS.map((tab) => (
+        {TRIP_STAGES.map((tab) => (
           <button
-            key={tab.label}
-            onClick={() => setShipmentTab(tab.label)}
+            key={tab.value}
+            onClick={() => setShipmentStage(tab.value)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 ${
-              shipmentTab === tab.label ? "bg-white shadow-card text-brand-navy" : "bg-slate-100 text-slate-500 hover:text-slate-700"
+              shipmentStage === tab.value ? "bg-white shadow-card text-brand-navy" : "bg-slate-100 text-slate-500 hover:text-slate-700"
             }`}
           >
-            <span className="icon-tile w-7 h-7 rounded-lg" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+            <span className="icon-tile w-7 h-7 rounded-lg" style={{ "--tile-from": "#38bdf8", "--tile-to": "#0369a1" }}>
               <tab.icon className="w-3.5 h-3.5 text-white" />
             </span>
             {tab.label}
-            <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${shipmentTab === tab.label ? "bg-brand-orangeSoft text-brand-orange" : "bg-slate-200 text-slate-500"}`}>
-              {counts[tab.label] ?? 0}
+            <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${shipmentStage === tab.value ? "bg-brand-orangeSoft text-brand-orange" : "bg-slate-200 text-slate-500"}`}>
+              {counts[tab.value] ?? 0}
             </span>
           </button>
         ))}
@@ -945,57 +1012,226 @@ function ActiveShipments({ merchantId }) {
             <ChartIcon className="w-4 h-4" /> No loads in this stage right now.
           </p>
         )}
-        {visibleLoads.map((l) => {
-          const CommodityIcon = COMMODITY_ICON[l.commodity] ?? CottonIcon;
-          const vehicle = l.assigned_vehicle_id ? vehicleMap[l.assigned_vehicle_id] : null;
-          return (
-            <div key={l.id} className="card space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
-                    <CommodityIcon className="w-5 h-5" />
-                  </span>
-                  <div>
-                    <p className="font-semibold text-brand-navy">
-                      {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
-                    </p>
-                    <p className="text-sm text-slate-500 flex items-center gap-1.5">
-                      <RouteIcon className="w-3.5 h-3.5 shrink-0" /> {l.pickup_location} &rarr; {l.dropoff_location}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {l.assigned_vehicle_id ? (
-                    <span className="badge-valid">
-                      Step {effectiveStage(l)}/8 — {stageMeta(effectiveStage(l)).label}
-                    </span>
-                  ) : (
-                    <span className="badge-valid capitalize">{l.status.replace("_", " ")}</span>
-                  )}
-                  {biltyMap[l.id] && <span className="text-xs text-slate-500">Bilty: {biltyMap[l.id].bilty_no}</span>}
-                </div>
-              </div>
-
-              {/* Vehicle & driver details — shown once a truck has accepted the load */}
-              {vehicle ? (
-                <div className="border-t border-slate-100 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <VehicleDetail icon={TruckIcon} label="Vehicle No" value={vehicle.vehicle_no} />
-                  <VehicleDetail icon={TruckCheckIcon} label="Vehicle Type" value={vehicle.vehicle_type || "—"} />
-                  <VehicleDetail icon={UserIcon} label="Driver" value={vehicle.driver_name} />
-                  <VehicleDetail icon={PhoneIcon} label="Mobile" value={vehicle.mobile_no} />
-                </div>
-              ) : (
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                    <ClockIcon className="w-3.5 h-3.5" /> Waiting for a verified driver to accept this load.
-                  </p>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {visibleLoads.map((l) => (
+          <ShipmentCard
+            key={l.id}
+            load={l}
+            vehicle={l.assigned_vehicle_id ? vehicleMap[l.assigned_vehicle_id] : null}
+            bilty={biltyMap[l.id]}
+            merchantId={merchantId}
+            onChanged={refresh}
+          />
+        ))}
       </div>
     </div>
+  );
+}
+
+function ShipmentCard({ load, vehicle, bilty, merchantId, onChanged }) {
+  const CommodityIcon = COMMODITY_ICON[load.commodity] ?? CottonIcon;
+  const stage = effectiveStage(load);
+  const meta = stageMeta(stage);
+  const [showBilty, setShowBilty] = useState(false);
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
+            <CommodityIcon className="w-5 h-5" />
+          </span>
+          <div>
+            <p className="font-semibold text-brand-navy">
+              {load.commodity} — {load.quantity_value ?? load.quantity_munds} {load.quantity_unit ?? "Munds"}
+            </p>
+            <p className="text-sm text-slate-500 flex items-center gap-1.5">
+              <RouteIcon className="w-3.5 h-3.5 shrink-0" /> {load.pickup_location} &rarr; {load.dropoff_location}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="badge-valid">
+            Step {stage}/{MAX_STAGE} — {meta.label}
+          </span>
+          {vehicle && <LoadChatButton loadId={load.id} currentUserId={merchantId} label="" counterpartLabel={`Chat with ${vehicle.driver_name || "Driver"}`} className="w-9 h-9 flex items-center justify-center rounded-full text-brand-orange bg-brand-orange/10" />}
+        </div>
+      </div>
+
+      {/* Vehicle & driver details — shown once a truck has accepted the load */}
+      {vehicle ? (
+        <div className="border-t border-slate-100 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <VehicleDetail icon={TruckIcon} label="Vehicle No" value={vehicle.vehicle_no} />
+          <VehicleDetail icon={TruckCheckIcon} label="Vehicle Type" value={vehicle.vehicle_type || "—"} />
+          <VehicleDetail icon={UserIcon} label="Driver" value={vehicle.driver_name} />
+          <VehicleDetail icon={PhoneIcon} label="Mobile" value={vehicle.mobile_no} />
+        </div>
+      ) : (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+            <ClockIcon className="w-3.5 h-3.5" /> Waiting for a verified driver to accept this load.
+          </p>
+        </div>
+      )}
+
+      {/* ---- Stage 2: Documentation — review weighment slip + fill/submit Bilty ---- */}
+      {stage === 2 && (
+        <div className="border-t border-slate-100 pt-4 space-y-3">
+          {load.weighment_slip_url ? (
+            <a href={load.weighment_slip_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
+              <EyeIcon className="w-4 h-4" /> View driver&apos;s weighment slip
+            </a>
+          ) : (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Waiting for the driver to upload the weighment slip...
+            </p>
+          )}
+
+          {load.weighment_slip_url && bilty && bilty.status !== "submitted" && (
+            <BiltyForm load={load} bilty={bilty} vehicle={vehicle} onSubmitted={onChanged} />
+          )}
+          {bilty?.status === "submitted" && (
+            <button onClick={() => setShowBilty(true)} className="flex items-center gap-1.5 text-sm border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-600">
+              <DocumentCheckIcon className="w-4 h-4" /> View Submitted Bilty
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ---- Stage 3: On the Way — live GPS tracking ---- */}
+      {stage === 3 && vehicle && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold text-brand-navy mb-2 flex items-center gap-1.5">
+            <RadarIcon className="w-3.5 h-3.5 text-blue-600" /> Live truck location
+          </p>
+          <LiveTrackingWidget load={load} vehicle={vehicle} />
+        </div>
+      )}
+
+      {/* ---- Stage 4: Reached Destination — review arrival photo + approve ---- */}
+      {stage === 4 && (
+        <div className="border-t border-slate-100 pt-4 space-y-3">
+          {load.delivery_proof_url && (
+            <a href={load.delivery_proof_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
+              <EyeIcon className="w-4 h-4" /> View arrival photo
+            </a>
+          )}
+          {!load.merchant_approved_at ? (
+            <button
+              onClick={async () => approveArrival({ load, driverId: vehicle?.driver_id }).then(onChanged)}
+              className="btn-orange text-sm py-2"
+            >
+              <CheckCircleIcon className="w-4 h-4" /> Approve Delivery
+            </button>
+          ) : (
+            <p className="text-xs text-green-700 flex items-center gap-1.5">
+              <CheckCircleIcon className="w-3.5 h-3.5" /> Approved — waiting for the driver to close the trip.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ---- Stage 5: Rent Received — trip complete ---- */}
+      {stage === 5 && bilty && (
+        <div className="border-t border-slate-100 pt-4">
+          <button onClick={() => setShowBilty(true)} className="flex items-center gap-1.5 text-sm border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-600">
+            <DocumentCheckIcon className="w-4 h-4" /> View Bilty
+          </button>
+        </div>
+      )}
+
+      {showBilty && bilty && <BiltyModal bilty={bilty} load={load} onClose={() => setShowBilty(false)} />}
+    </div>
+  );
+}
+
+function LiveTrackingWidget({ load, vehicle }) {
+  const [position, setPosition] = useState(
+    vehicle.current_lat != null ? { lat: vehicle.current_lat, lng: vehicle.current_lng } : null
+  );
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`vehicle-track-${vehicle.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "vehicles", filter: `id=eq.${vehicle.id}` }, ({ new: row }) => {
+        if (row.current_lat != null) setPosition({ lat: row.current_lat, lng: row.current_lng });
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [vehicle.id]);
+
+  return (
+    <LiveVehicleMap
+      vehiclePosition={position}
+      destination={load.dropoff_lat != null ? { lat: load.dropoff_lat, lng: load.dropoff_lng } : null}
+      driverName={vehicle.driver_name}
+      vehicleNo={vehicle.vehicle_no}
+    />
+  );
+}
+
+function BiltyForm({ load, bilty, vehicle, onSubmitted }) {
+  const [fields, setFields] = useState({
+    vehicle_no: vehicle?.vehicle_no || "",
+    driver_name: vehicle?.driver_name || "",
+    commodity: load.commodity || "",
+    quantity_text: `${load.quantity_value ?? load.quantity_munds ?? ""} ${load.quantity_unit ?? "Munds"}`,
+    freight_rate: load.offered_rate ? String(load.offered_rate) : "",
+    from_location: load.pickup_location || "",
+    to_location: load.dropoff_location || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function update(key, value) {
+    setFields((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await submitBilty({ biltyId: bilty.id, fields, load, driverId: vehicle?.driver_id });
+      await onSubmitted?.();
+    } catch (err) {
+      setError(err.message || "Could not submit the Bilty.");
+    }
+    setSaving(false);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-slate-50 rounded-xl p-4 space-y-3">
+      <p className="text-sm font-bold text-brand-navy flex items-center gap-1.5">
+        <DocumentCheckIcon className="w-4 h-4 text-brand-orange" /> Fill in the Bilty
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <BiltyField label="Vehicle No" value={fields.vehicle_no} onChange={(v) => update("vehicle_no", v)} />
+        <BiltyField label="Driver Name" value={fields.driver_name} onChange={(v) => update("driver_name", v)} />
+        <BiltyField label="Commodity" value={fields.commodity} onChange={(v) => update("commodity", v)} />
+        <BiltyField label="Quantity" value={fields.quantity_text} onChange={(v) => update("quantity_text", v)} />
+        <BiltyField label="From" value={fields.from_location} onChange={(v) => update("from_location", v)} />
+        <BiltyField label="To" value={fields.to_location} onChange={(v) => update("to_location", v)} />
+        <BiltyField label="Freight Rate (PKR)" value={fields.freight_rate} onChange={(v) => update("freight_rate", v)} />
+      </div>
+      {error && <p className="text-red-600 text-xs">{error}</p>}
+      <button type="submit" disabled={saving} className="btn-orange text-sm py-2 w-full justify-center">
+        {saving ? "Submitting..." : "Submit Bilty to Driver"}
+      </button>
+    </form>
+  );
+}
+
+function BiltyField({ label, value, onChange }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] text-slate-400 uppercase tracking-wide">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="field-input w-full mt-0.5 text-sm py-1.5"
+        required
+      />
+    </label>
   );
 }
 

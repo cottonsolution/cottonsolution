@@ -50,13 +50,20 @@ sgtc/
    This creates all tables (`profiles`, `site_content`, `services`,
    `how_it_works_steps`, `vehicles`, `loads`, `bids`, `biltys`), the
    `vehicle_verification_view`, RLS policies, and seeds the initial
-   Services and How It Works content.
+   Services and How It Works content. Then run the migrations in
+   `supabase/migrations/` **in order** (002 → 003 → 004 → 005). Migration
+   005 adds realtime chat, push-notification support, and the 6-step
+   shipment workflow — see `CHANGES_REALTIME.md` for the full breakdown.
 3. In **Storage**, create a bucket named `biltys` (for generated bilty PDFs)
    and `documents` (for CNIC/licence/permit scans, optional upload feature).
+   Migration 005 creates the `shipment-media` bucket automatically.
 4. In **Authentication → Providers**, email/password is enabled by default —
    no extra config needed for this build.
 5. Copy your project's **URL** and **anon public key** from
-   **Project Settings → API**.
+   **Project Settings → API**. Also copy the **service_role** key (needed
+   server-side only, for sending push notifications) and set the VAPID keys
+   — see `.env.local.example` for the full list of variables and
+   `CHANGES_REALTIME.md` for what each one is for.
 
 ## 4. Local Development
 
@@ -88,6 +95,10 @@ git push -u origin main
 3. Add Environment Variables (Project Settings → Environment Variables):
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (server-only)
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+   - `VAPID_PRIVATE_KEY` (server-only)
+   - `VAPID_SUBJECT` (e.g. `mailto:support@yourdomain.com`)
 4. Click **Deploy**. Every push to `main` redeploys automatically.
 5. (Optional) Attach a custom domain under **Project Settings → Domains**.
 

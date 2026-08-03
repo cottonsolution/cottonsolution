@@ -123,3 +123,17 @@ textarea.field-input {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* Bilty printing: only #bilty-print-area is shown when the browser print
+   dialog opens (also used for "Save as PDF" via the browser's print sheet). */
+@media print {
+  body * { visibility: hidden; }
+  #bilty-print-area, #bilty-print-area * { visibility: visible; }
+  #bilty-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 24px;
+  }
+}

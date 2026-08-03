@@ -683,6 +683,18 @@ export function ArrowDownIcon({ className }) {
   );
 }
 
+// Bidding / offers (Available Loads counter-bid, Merchant Bid Review panel)
+export function GavelIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M14 5l5 5" />
+      <path d="M9.5 9.5L4 15v3.5A1.5 1.5 0 0 0 5.5 20H9l5.5-5.5" />
+      <path d="M12.5 3.5l8 8" strokeWidth="2.2" />
+      <path d="M2 21h9" />
+    </svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // DETAILED "HOW IT WORKS" ILLUSTRATIONS — flat, multi-colour character art
 // (not simple line icons) so the 3-step story reads at a glance even for

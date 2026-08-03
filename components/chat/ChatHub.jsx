@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseBrowserClient";
 import { ChatIcon, UserIcon, RouteIcon, ShieldCheckIcon } from "@/components/Icons";
+import CallButton from "@/components/CallButton";
 import ChatModal from "./ChatModal";
 
 /**
@@ -124,21 +125,29 @@ export default function ChatHub({ userId, role, vehicleId }) {
         {!loading && contacts.length === 0 && <p className="text-slate-400 text-sm">No contacts yet.</p>}
         <div className="space-y-2">
           {contacts.map((c) => (
-            <button
+            <div
               key={c.id}
-              onClick={() => setOpenContact(c)}
               className="w-full text-left card flex items-center gap-3 py-3 hover:ring-2 hover:ring-brand-orange/30 transition-shadow"
             >
-              <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
-                {c.role === "admin" ? <ShieldCheckIcon className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-brand-navy truncate">
-                  {c.full_name} {c.role === "admin" && <span className="text-xs text-brand-orange font-bold">(Support)</span>}
-                </p>
-                <p className="text-sm text-slate-500 truncate">{c.lastMessage?.body || "Tap to start chatting"}</p>
-              </div>
-            </button>
+              <button onClick={() => setOpenContact(c)} className="flex items-center gap-3 min-w-0 flex-1 text-left">
+                <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
+                  {c.role === "admin" ? <ShieldCheckIcon className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-brand-navy truncate">
+                    {c.full_name} {c.role === "admin" && <span className="text-xs text-brand-orange font-bold">(Support)</span>}
+                  </p>
+                  <p className="text-sm text-slate-500 truncate">{c.lastMessage?.body || "Tap to start chatting"}</p>
+                </div>
+              </button>
+              {c.phone && (
+                <CallButton
+                  phone={c.phone}
+                  label=""
+                  className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full text-green-600 bg-green-500/10"
+                />
+              )}
+            </div>
           ))}
         </div>
       </div>
@@ -175,6 +184,7 @@ export default function ChatHub({ userId, role, vehicleId }) {
           subtitle={openContact.role === "admin" ? "Support" : undefined}
           otherUserId={openContact.id}
           otherUserName={openContact.full_name}
+          phone={openContact.phone}
           currentUserId={userId}
           onClose={() => setOpenContact(null)}
         />

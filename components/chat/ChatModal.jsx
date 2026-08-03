@@ -1,9 +1,10 @@
 "use client";
 
 import { CloseIcon, ChatIcon } from "@/components/Icons";
+import CallButton from "@/components/CallButton";
 import ChatThread from "./ChatThread";
 
-export default function ChatModal({ title, subtitle, onClose, ...threadProps }) {
+export default function ChatModal({ title, subtitle, phone, onClose, ...threadProps }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -16,6 +17,13 @@ export default function ChatModal({ title, subtitle, onClose, ...threadProps }) 
             <p className="font-bold text-brand-navy truncate">{title}</p>
             {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
           </div>
+          {phone && (
+            <CallButton
+              phone={phone}
+              label=""
+              className="w-9 h-9 flex items-center justify-center rounded-full text-green-600 bg-green-500/10 shrink-0"
+            />
+          )}
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-slate-400 shrink-0" aria-label="Close chat">
             <CloseIcon className="w-5 h-5" />
           </button>

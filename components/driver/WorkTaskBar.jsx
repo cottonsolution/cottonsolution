@@ -22,6 +22,7 @@ import {
 } from "@/lib/shipmentActions";
 import BiltyModal from "@/components/BiltyModal";
 import LoadChatButton from "@/components/chat/LoadChatButton";
+import CallButton from "@/components/CallButton";
 
 /**
  * Persistent band at the top of the dashboard while the driver is in Work
@@ -95,6 +96,22 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
   const [bilty, setBilty] = useState(null);
   const [showBilty, setShowBilty] = useState(false);
   const [error, setError] = useState("");
+  const [merchantPhone, setMerchantPhone] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("profiles")
+      .select("phone")
+      .eq("id", load.merchant_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setMerchantPhone(data?.phone ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load.merchant_id]);
 
   async function refreshBilty() {
     const { data } = await supabase.from("biltys").select("*").eq("load_id", load.id).maybeSingle();
@@ -187,6 +204,11 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
         <div className="flex items-center justify-between mb-1">
           <h3 className="font-bold text-brand-navy">Load Tracking</h3>
           <div className="flex items-center gap-1">
+            <CallButton
+              phone={merchantPhone}
+              label=""
+              className="w-9 h-9 flex items-center justify-center rounded-full text-green-600 bg-green-500/10"
+            />
             <LoadChatButton
               loadId={load.id}
               currentUserId={driverId}

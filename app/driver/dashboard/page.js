@@ -25,6 +25,8 @@ import {
   IdCardIcon,
   CheckCircleIcon,
   ChatIcon,
+  GavelIcon,
+  ClockIcon,
 } from "@/components/Icons";
 import ModeSwitcher from "@/components/driver/ModeSwitcher";
 import WorkTaskBar, { TripTrackerModal } from "@/components/driver/WorkTaskBar";
@@ -430,6 +432,7 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
   const [loads, setLoads] = useState([]);
   const [bidAmounts, setBidAmounts] = useState({});
   const [message, setMessage] = useState("");
+  const [myBids, setMyBids] = useState({}); // load_id -> latest bid row placed by this driver
 
   async function refresh() {
     const { data } = await supabase.from("loads").select("*").eq("status", "open").order("created_at", { ascending: false });
@@ -444,9 +447,47 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
   }
   useEffect(() => { refresh(); }, [vehicle]);
 
+  async function refreshMyBids() {
+    if (!driverId) return;
+    const { data } = await supabase
+      .from("bids")
+      .select("*")
+      .eq("driver_id", driverId)
+      .order("created_at", { ascending: false });
+    const latestByLoad = {};
+    (data ?? []).forEach((b) => {
+      if (!latestByLoad[b.load_id]) latestByLoad[b.load_id] = b; // newest first, thanks to ordering above
+    });
+    setMyBids(latestByLoad);
+  }
+  useEffect(() => { refreshMyBids(); }, [driverId]);
+
+  // Realtime: the open-loads board updates the instant a merchant posts a
+  // new load or another driver's bid gets accepted (this load disappears
+  // from "open"); this driver's own bids update the instant the merchant
+  // accepts/rejects one from the Bid Review panel (functional requirement #2).
+  useEffect(() => {
+    const loadsChannel = supabase
+      .channel("driver-open-loads-board")
+      .on("postgres_changes", { event: "*", schema: "public", table: "loads" }, () => refresh())
+      .subscribe();
+    const bidsChannel = driverId
+      ? supabase
+          .channel(`driver-my-bids-${driverId}`)
+          .on("postgres_changes", { event: "*", schema: "public", table: "bids", filter: `driver_id=eq.${driverId}` }, () => refreshMyBids())
+          .subscribe()
+      : null;
+    return () => {
+      supabase.removeChannel(loadsChannel);
+      if (bidsChannel) supabase.removeChannel(bidsChannel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverId]);
+
   async function placeBid(load, accept) {
     if (!vehicle) return setMessage("Register your vehicle before bidding.");
     const amount = accept ? load.offered_rate ?? 0 : Number(bidAmounts[load.id] || 0);
+    if (!accept && amount <= 0) return setMessage("Enter a counter-offer amount first.");
 
     await supabase.from("bids").insert({
       load_id: load.id,
@@ -455,6 +496,7 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
       bid_amount: amount,
       status: accept ? "accepted" : "pending",
     });
+    refreshMyBids();
 
     if (accept) {
       const { data: updated, error: acceptError } = await supabase
@@ -479,7 +521,7 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
       refresh();
       onAccepted?.();
     } else {
-      setMessage(`Counter-bid of PKR ${amount} sent to the merchant.`);
+      setMessage(`Counter-bid of PKR ${amount} sent to the merchant — you'll be notified when they respond.`);
     }
   }
 
@@ -497,6 +539,7 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
       )}
       {loads.map((l) => {
         const isMatch = vehicle?.vehicle_type && l.vehicle_type_needed === vehicle.vehicle_type;
+        const myBid = myBids[l.id];
         return (
         <div key={l.id} className={`card flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isMatch ? "border-2 border-green-400" : ""}`}>
           <div className="flex items-center gap-3">
@@ -519,10 +562,27 @@ function AvailableLoads({ driverId, vehicle, onAccepted }) {
               </p>
               <p className="text-sm text-slate-500 flex items-center gap-1.5">
                 <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
+                {l.distance_km != null && <span className="text-slate-400">· {l.distance_km} km</span>}
               </p>
               {l.offered_rate && (
                 <p className="text-sm text-slate-500 flex items-center gap-1.5">
                   <WalletIcon className="w-3.5 h-3.5" /> Offered rate: PKR {l.offered_rate}
+                </p>
+              )}
+              {/* Live status of this driver's own bid on this load — updates
+                  instantly via realtime when the merchant accepts/rejects it
+                  from the Bid Review panel. */}
+              {myBid && (
+                <p
+                  className={`mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                    myBid.status === "accepted"
+                      ? "bg-green-50 text-green-700 border border-green-200"
+                      : myBid.status === "rejected"
+                      ? "bg-slate-100 text-slate-400 border border-slate-200"
+                      : "bg-amber-50 text-amber-700 border border-amber-200"
+                  }`}
+                >
+                  <GavelIcon className="w-3 h-3" /> Your bid: PKR {Number(myBid.bid_amount).toLocaleString()} — {myBid.status}
                 </p>
               )}
             </div>

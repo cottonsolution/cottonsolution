@@ -37,13 +37,18 @@ import {
   UploadIcon,
   CheckCircleIcon,
   DocumentCheckIcon,
+  GavelIcon,
 } from "@/components/Icons";
 import ChatHub from "@/components/chat/ChatHub";
 import LoadChatButton from "@/components/chat/LoadChatButton";
 import LoadAcceptedAlert from "@/components/merchant/LoadAcceptedAlert";
+import LoadBidsPanel from "@/components/merchant/LoadBidsPanel";
+import CallButton from "@/components/CallButton";
 import BiltyModal from "@/components/BiltyModal";
 import { subscribeToPush } from "@/lib/pushClient";
 import { submitBilty, approveArrival } from "@/lib/shipmentActions";
+import { getRoadDistanceKm } from "@/lib/distance";
+import { estimateFare } from "@/lib/fareEstimate";
 
 const LiveVehicleMap = dynamic(() => import("@/components/merchant/LiveVehicleMap"), { ssr: false });
 
@@ -262,6 +267,41 @@ function PostLoad({ merchantId }) {
   const [refreshKey, setRefreshKey] = useState(0); // bumped after a successful post so the cards list refetches
   const [editingLoad, setEditingLoad] = useState(null); // load row being edited, or null
 
+  // ---- Live distance & fare suggestion (functional requirement #1) ----
+  const [distanceKm, setDistanceKm] = useState(null);
+  const [distanceSource, setDistanceSource] = useState(null); // "osrm" | "estimated"
+  const [calculatingDistance, setCalculatingDistance] = useState(false);
+  const [fareApplied, setFareApplied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!pickupCoords || !dropoffCoords) {
+      setDistanceKm(null);
+      setDistanceSource(null);
+      return;
+    }
+    setCalculatingDistance(true);
+    setFareApplied(false);
+    getRoadDistanceKm(pickupCoords, dropoffCoords).then(({ km, source }) => {
+      if (cancelled) return;
+      setDistanceKm(km);
+      setDistanceSource(source);
+      setCalculatingDistance(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pickupCoords, dropoffCoords]);
+
+  const selectedVehicleTypeName = vehicleTypes.find((v) => v.id === form.vehicle_type_id)?.name;
+  const suggestedFare = distanceKm ? estimateFare(distanceKm, selectedVehicleTypeName) : null;
+
+  function applySuggestedFare() {
+    if (!suggestedFare) return;
+    setForm((f) => ({ ...f, offered_rate: String(suggestedFare) }));
+    setFareApplied(true);
+  }
+
   // Dynamic dropdown sources — Commodity, Quantity Unit, and Truck Type all
   // come from the Admin Dashboard (functional requirements #1, #2, #3, #6).
   useEffect(() => {
@@ -289,6 +329,9 @@ function PostLoad({ merchantId }) {
     });
     setPickupCoords(null);
     setDropoffCoords(null);
+    setDistanceKm(null);
+    setDistanceSource(null);
+    setFareApplied(false);
   }
 
   async function handleSubmit(e) {
@@ -327,6 +370,7 @@ function PostLoad({ merchantId }) {
       offered_rate_unit_id: form.offered_rate ? form.offered_rate_unit_id : null,
       vehicle_type_needed: vehicleType?.name ?? null,
       vehicle_type_id: form.vehicle_type_id,
+      distance_km: distanceKm,
     });
     if (insertError) return setError(insertError.message);
 
@@ -459,6 +503,41 @@ function PostLoad({ merchantId }) {
           />
         </div>
 
+        {/* LIVE DISTANCE & FARE SUGGESTION — functional requirement #1.
+            Appears once both pickup and drop-off are pinned; auto-calculates
+            road distance (OSRM) and suggests a starting base fare which the
+            merchant can accept as-is or edit before posting. */}
+        {(pickupCoords && dropoffCoords) && (
+          <div className="bg-brand-orangeSoft/60 border border-brand-orange/20 rounded-xl px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand-navy">
+              <RouteIcon className="w-4 h-4 text-brand-orange" />
+              {calculatingDistance ? "Calculating distance…" : distanceKm ? `${distanceKm} km route` : "Distance unavailable"}
+              {distanceSource === "estimated" && !calculatingDistance && (
+                <span className="text-[10px] font-medium text-slate-400">(estimated)</span>
+              )}
+            </div>
+            {!calculatingDistance && suggestedFare != null && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-slate-600">
+                  Suggested base fare: <span className="font-bold text-brand-navy">PKR {suggestedFare.toLocaleString()}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={applySuggestedFare}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${
+                    fareApplied ? "border-green-400 text-green-700 bg-green-50" : "border-brand-orange text-brand-orange hover:bg-white"
+                  }`}
+                >
+                  {fareApplied ? "Applied ✓" : "Use this fare"}
+                </button>
+              </div>
+            )}
+            <p className="text-[11px] text-slate-400">
+              This is only a starting point — you can edit it below, and drivers can still counter-offer their own rate.
+            </p>
+          </div>
+        )}
+
         {/* 6. TARGET FREIGHT — numeric amount + dynamic rate-unit dropdown */}
         <div>
           <label className="field-label">
@@ -525,6 +604,8 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
   const [loads, setLoads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewLoad, setViewLoad] = useState(null);
+  const [bidsLoad, setBidsLoad] = useState(null); // load whose Bid Review panel is open
+  const [bidCounts, setBidCounts] = useState({}); // load_id -> pending bid count
 
   async function refresh() {
     const { data } = await supabase
@@ -533,8 +614,23 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
       .eq("merchant_id", merchantId)
       .eq("status", "open")
       .order("created_at", { ascending: false });
-    setLoads(data ?? []);
+    const rows = data ?? [];
+    setLoads(rows);
     setLoading(false);
+
+    // Pending-bid counts, so the "View Bids" button shows a live badge
+    // without opening the panel first.
+    const loadIds = rows.map((l) => l.id);
+    if (loadIds.length) {
+      const { data: bidRows } = await supabase.from("bids").select("load_id, status").in("load_id", loadIds).eq("status", "pending");
+      const counts = {};
+      (bidRows ?? []).forEach((b) => {
+        counts[b.load_id] = (counts[b.load_id] || 0) + 1;
+      });
+      setBidCounts(counts);
+    } else {
+      setBidCounts({});
+    }
   }
 
   useEffect(() => {
@@ -554,7 +650,16 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
         () => refresh()
       )
       .subscribe();
-    return () => supabase.removeChannel(channel);
+    // New/updated bids on any of this merchant's loads bump the badge live
+    // (functional requirement #2 — Supabase Realtime bidding updates).
+    const bidsChannel = supabase
+      .channel(`merchant-bid-badges-${merchantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, () => refresh())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(bidsChannel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantId]);
 
@@ -603,6 +708,11 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
                   PKR {l.offered_rate} / {l.offered_rate_unit ?? l.quantity_unit ?? "unit"}
                 </p>
               )}
+              {l.distance_km != null && (
+                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <RouteIcon className="w-3 h-3" /> {l.distance_km} km route
+                </p>
+              )}
 
               <div className="flex gap-2 pt-1 border-t border-slate-100">
                 <button onClick={() => setViewLoad(l)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-2.5 min-h-[40px] text-xs font-semibold border border-slate-300 rounded-lg text-slate-600 active:bg-slate-50">
@@ -615,12 +725,37 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
                   <TrashIcon className="w-3.5 h-3.5" /> Delete
                 </button>
               </div>
+
+              {/* Bid Review entry point — functional requirement #3.
+                  Badge shows the live pending-bid count via Supabase
+                  Realtime, so the merchant knows to check without opening
+                  the panel first. */}
+              <button
+                onClick={() => setBidsLoad(l)}
+                className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] text-xs font-bold rounded-lg ${
+                  bidCounts[l.id] ? "bg-brand-orange text-white" : "border border-slate-300 text-slate-600 active:bg-slate-50"
+                }`}
+              >
+                <GavelIcon className="w-3.5 h-3.5" />
+                {bidCounts[l.id] ? `View Bids (${bidCounts[l.id]} new)` : "View Bids"}
+              </button>
             </div>
           );
         })}
       </div>
 
       {viewLoad && <ViewLoadModal load={viewLoad} onClose={() => setViewLoad(null)} />}
+      {bidsLoad && (
+        <LoadBidsPanel
+          load={bidsLoad}
+          merchantId={merchantId}
+          onClose={() => setBidsLoad(null)}
+          onAccepted={() => {
+            setBidsLoad(null);
+            refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -657,6 +792,7 @@ function ViewLoadModal({ load, onClose }) {
         {load.pickup_lat && <MiniMapPreview lat={load.pickup_lat} lng={load.pickup_lng} />}
         <DetailRow icon={RouteIcon} label="Drop-off" value={load.dropoff_location} />
         {load.dropoff_lat && <MiniMapPreview lat={load.dropoff_lat} lng={load.dropoff_lng} />}
+        {load.distance_km != null && <DetailRow icon={RouteIcon} label="Route Distance" value={`${load.distance_km} km`} />}
         {load.offered_rate && (
           <DetailRow icon={WalletIcon} label="Target Freight" value={`PKR ${load.offered_rate} / ${load.offered_rate_unit ?? load.quantity_unit ?? "unit"}`} />
         )}
@@ -709,6 +845,14 @@ function EditLoadModal({ load, commodities, quantityUnits, vehicleTypes, onClose
     const rateUnit = quantityUnits.find((u) => u.id === form.offered_rate_unit_id);
     const value = Number(form.quantity_value);
 
+    // Recompute the route distance only if the pinned points actually
+    // changed in this edit; otherwise keep the value already stored.
+    let distanceKm = load.distance_km ?? null;
+    if (pickupCoords && dropoffCoords) {
+      const { km } = await getRoadDistanceKm(pickupCoords, dropoffCoords);
+      distanceKm = km;
+    }
+
     const { error: updateError } = await supabase
       .from("loads")
       .update({
@@ -731,6 +875,7 @@ function EditLoadModal({ load, commodities, quantityUnits, vehicleTypes, onClose
         offered_rate: form.offered_rate ? Number(form.offered_rate) : null,
         offered_rate_unit: form.offered_rate ? rateUnit?.name ?? null : null,
         offered_rate_unit_id: form.offered_rate ? form.offered_rate_unit_id || null : null,
+        distance_km: distanceKm,
       })
       .eq("id", load.id)
       .eq("status", "open"); // guard: never edit a load that's already been accepted
@@ -1053,7 +1198,16 @@ function ShipmentCard({ load, vehicle, bilty, merchantId, onChanged }) {
           <span className="badge-valid">
             Step {stage}/{MAX_STAGE} — {meta.label}
           </span>
-          {vehicle && <LoadChatButton loadId={load.id} currentUserId={merchantId} label="" counterpartLabel={`Chat with ${vehicle.driver_name || "Driver"}`} className="w-9 h-9 flex items-center justify-center rounded-full text-brand-orange bg-brand-orange/10" />}
+          {vehicle && (
+            <>
+              <CallButton
+                phone={vehicle.mobile_no}
+                label=""
+                className="w-9 h-9 flex items-center justify-center rounded-full text-green-600 bg-green-500/10"
+              />
+              <LoadChatButton loadId={load.id} currentUserId={merchantId} label="" counterpartLabel={`Chat with ${vehicle.driver_name || "Driver"}`} className="w-9 h-9 flex items-center justify-center rounded-full text-brand-orange bg-brand-orange/10" />
+            </>
+          )}
         </div>
       </div>
 

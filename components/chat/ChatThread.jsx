@@ -5,6 +5,19 @@ import { supabase } from "@/lib/supabaseBrowserClient";
 import { triggerPush } from "@/lib/pushClient";
 import { SendIcon, ChatIcon } from "@/components/Icons";
 
+// Quick-reply chips for per-shipment chat — common phrases a driver/merchant
+// needs mid-trip, one tap instead of typing (functional requirement #4).
+const QUICK_TEMPLATES = [
+  "On my way to pickup",
+  "Reached pickup point",
+  "Loading in progress",
+  "On the way to drop-off",
+  "Reached destination",
+  "Please share exact location",
+  "Running a little late",
+  "Thank you!",
+];
+
 /**
  * Live message thread. Two modes, driven by which props are passed:
  *  - Per-load chat:  pass `loadId` — visible to that load's merchant +
@@ -63,10 +76,9 @@ export default function ChatThread({ loadId, otherUserId, otherUserName, current
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
-  async function handleSend(e) {
-    e.preventDefault();
-    const text = body.trim();
-    if (!text || sending) return;
+  async function sendMessage(text) {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
     setSending(true);
     setBody("");
 
@@ -74,12 +86,12 @@ export default function ChatThread({ loadId, otherUserId, otherUserName, current
       load_id: loadId || null,
       sender_id: currentUserId,
       receiver_id: loadId ? null : otherUserId,
-      body: text,
+      body: trimmed,
     };
     const { error } = await supabase.from("messages").insert(row);
     setSending(false);
     if (error) {
-      setBody(text);
+      setBody(trimmed);
       return;
     }
 
@@ -88,11 +100,16 @@ export default function ChatThread({ loadId, otherUserId, otherUserName, current
       triggerPush({
         userId: recipientId,
         title: `New message${otherUserName ? "" : ""}`,
-        body: text,
+        body: trimmed,
         url: "/",
         tag: "sgtc-chat",
       });
     }
+  }
+
+  async function handleSend(e) {
+    e.preventDefault();
+    await sendMessage(body);
   }
 
   return (
@@ -123,6 +140,22 @@ export default function ChatThread({ loadId, otherUserId, otherUserName, current
         })}
         <div ref={bottomRef} />
       </div>
+
+      {loadId && (
+        <div className="flex gap-2 overflow-x-auto px-3 pt-2 pb-1 border-t border-slate-100 bg-white shrink-0">
+          {QUICK_TEMPLATES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => sendMessage(t)}
+              disabled={sending}
+              className="shrink-0 whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 hover:bg-brand-orangeSoft hover:border-brand-orange/30 disabled:opacity-50"
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
 
       <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-slate-200 p-3 bg-white shrink-0">
         <input

@@ -8,7 +8,7 @@ import ChatModal from "./ChatModal";
  * Drop this into any load/shipment/trip card. Opens a chat scoped to that
  * one load — visible to the load's merchant, its assigned driver, and admin.
  */
-export default function LoadChatButton({ loadId, currentUserId, label = "Chat", counterpartLabel = "Load Chat", className = "" }) {
+export default function LoadChatButton({ loadId, currentUserId, label = "Chat", counterpartLabel = "Load Chat", phone, className = "" }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -28,6 +28,7 @@ export default function LoadChatButton({ loadId, currentUserId, label = "Chat", 
           title={counterpartLabel}
           subtitle="Messages about this shipment"
           loadId={loadId}
+          phone={phone}
           currentUserId={currentUserId}
           onClose={() => setOpen(false)}
         />

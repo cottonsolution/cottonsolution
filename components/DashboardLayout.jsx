@@ -96,9 +96,9 @@ export default function DashboardLayout({
   );
 
   return (
-    <div className="min-h-screen flex bg-brand-slate">
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:flex-col w-64 bg-brand-navy shrink-0">
+    <div className="fixed inset-0 flex bg-brand-slate">
+      {/* Desktop sidebar — full height, does not scroll with the page */}
+      <aside className="hidden md:flex md:flex-col w-64 h-full bg-brand-navy shrink-0 overflow-y-auto">
         {SidebarContent}
       </aside>
 
@@ -110,7 +110,7 @@ export default function DashboardLayout({
             onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
-          <aside className="relative z-50 w-72 max-w-[80vw] bg-brand-navy flex flex-col animate-slide-in">
+          <aside className="relative z-50 w-72 max-w-[80vw] h-full bg-brand-navy flex flex-col overflow-y-auto animate-slide-in">
             <button
               onClick={() => setDrawerOpen(false)}
               className="absolute top-4 right-4 text-white/70 hover:text-white"
@@ -123,9 +123,9 @@ export default function DashboardLayout({
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 min-w-0 flex flex-col">
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+      {/* Header + content column — fixed height, no page-level scroll at all */}
+      <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-slate-200 shrink-0 z-20">
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3 min-w-0">
               <button
@@ -176,8 +176,14 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="flex-1 px-4 sm:px-6 py-6 sm:py-8 max-w-5xl w-full mx-auto">
-          {children}
+        {/* This is the ONLY element that scrolls — header and sidebar never move */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 sm:py-8">
+          <div className="max-w-5xl w-full mx-auto">
+            {children}
+            <p className="text-center text-xs text-slate-400 mt-10 pt-6 border-t border-slate-200">
+              &copy; {new Date().getFullYear()} Smart Goods Transport Company. All rights reserved.
+            </p>
+          </div>
         </main>
       </div>
     </div>

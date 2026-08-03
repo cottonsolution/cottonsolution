@@ -56,19 +56,11 @@ export default function Footer() {
       .catch(() => {});
   }, []);
 
-  // Admin/Merchant/Driver dashboards already have their own sidebar +
-  // sticky header taking care of navigation, so the full marketing footer
-  // (Quick Links, Contact block, social icons) is dropped there — only the
-  // green copyright strip stays, for a clean, uncluttered dashboard shell.
+  // Admin/Merchant/Driver dashboards are a fixed app-shell (DashboardLayout)
+  // that renders its own copyright line inside the scrollable content pane —
+  // rendering anything here too would duplicate it and break the fixed layout.
   const isDashboardRoute = /^\/(admin|merchant|driver)(\/|$)/.test(pathname);
-
-  if (isDashboardRoute) {
-    return (
-      <footer className="bg-brand-navy text-center text-xs text-slate-400 py-4">
-        &copy; {new Date().getFullYear()} Smart Goods Transport Company. All rights reserved.
-      </footer>
-    );
-  }
+  if (isDashboardRoute) return null;
 
   const activeSocials = SOCIAL_LINKS_META.filter((s) => contact[s.key]);
 

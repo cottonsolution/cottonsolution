@@ -34,8 +34,36 @@ export default function LoginPage() {
   }
 
   async function redirectByRole(userId) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).single();
-    router.push(ROLE_REDIRECT[profile?.role] ?? "/");
+    let { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    // First read can occasionally race the session just being established —
+    // retry once after a short pause before giving up.
+    if (!profile) {
+      await new Promise((r) => setTimeout(r, 600));
+      const retry = await supabase.from("profiles").select("role").eq("id", userId).single();
+      profile = retry.data;
+      profileError = retry.error;
+    }
+
+    if (!profile) {
+      setError(
+        profileError
+          ? `Could not load your profile: ${profileError.message}`
+          : "Your account is missing a profile row. Please contact support or check the Supabase 'profiles' table."
+      );
+      return;
+    }
+
+    const destination = ROLE_REDIRECT[profile.role];
+    if (!destination) {
+      setError(`Unrecognised account role "${profile.role}". Please contact support.`);
+      return;
+    }
+    router.push(destination);
   }
 
   async function handleLogin(e) {

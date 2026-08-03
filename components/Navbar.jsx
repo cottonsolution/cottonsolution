@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseBrowserClient";
 import {
   HomeIcon,
@@ -43,6 +44,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     supabase
@@ -53,6 +55,14 @@ export default function Navbar() {
       .then(({ data }) => data?.logo_url && setLogoUrl(data.logo_url))
       .catch(() => {});
   }, []);
+
+  // Admin/Merchant/Driver dashboards render their own sticky header inside
+  // DashboardLayout — showing the public marketing navbar above it too was
+  // redundant (two stacked headers) and pushed the dashboard content down.
+  // This check must come AFTER the hooks above (Rules of Hooks: hooks must
+  // run unconditionally on every render, in the same order).
+  const isDashboardRoute = /^\/(admin|merchant|driver)(\/|$)/.test(pathname);
+  if (isDashboardRoute) return null;
 
   return (
     <header className="bg-brand-navy sticky top-0 z-50 shadow-lg">

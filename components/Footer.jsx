@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   TruckIcon,
   GridIcon,
@@ -14,8 +18,7 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 
 // Contact details + social links are managed live from
-// Admin Dashboard > Contact, so the footer fetches fresh data on every
-// request rather than showing a stale build-time copy.
+// Admin Dashboard > Contact.
 const FALLBACK_CONTACT = {
   address: "Multan, Punjab, Pakistan",
   phone: "+92 300 0000000",
@@ -26,15 +29,6 @@ const FALLBACK_CONTACT = {
   youtube_url: null,
   x_url: null,
 };
-
-async function getContactInfo() {
-  try {
-    const { data } = await supabase.from("contact_info").select("*").eq("id", 1).single();
-    return data ?? FALLBACK_CONTACT;
-  } catch (e) {
-    return FALLBACK_CONTACT;
-  }
-}
 
 function whatsappLink(number) {
   const digits = (number || "").replace(/[^0-9]/g, "");
@@ -48,8 +42,34 @@ const SOCIAL_LINKS_META = [
   { key: "x_url", label: "X (Twitter)", icon: XIcon },
 ];
 
-export default async function Footer() {
-  const contact = await getContactInfo();
+export default function Footer() {
+  const [contact, setContact] = useState(FALLBACK_CONTACT);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    supabase
+      .from("contact_info")
+      .select("*")
+      .eq("id", 1)
+      .single()
+      .then(({ data }) => data && setContact(data))
+      .catch(() => {});
+  }, []);
+
+  // Admin/Merchant/Driver dashboards already have their own sidebar +
+  // sticky header taking care of navigation, so the full marketing footer
+  // (Quick Links, Contact block, social icons) is dropped there — only the
+  // green copyright strip stays, for a clean, uncluttered dashboard shell.
+  const isDashboardRoute = /^\/(admin|merchant|driver)(\/|$)/.test(pathname);
+
+  if (isDashboardRoute) {
+    return (
+      <footer className="bg-brand-navy text-center text-xs text-slate-400 py-4">
+        &copy; {new Date().getFullYear()} Smart Goods Transport Company. All rights reserved.
+      </footer>
+    );
+  }
+
   const activeSocials = SOCIAL_LINKS_META.filter((s) => contact[s.key]);
 
   return (

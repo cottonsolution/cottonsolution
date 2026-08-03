@@ -96,7 +96,7 @@ export default function DashboardLayout({
   );
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex bg-brand-slate">
+    <div className="min-h-screen flex bg-brand-slate">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:flex-col w-64 bg-brand-navy shrink-0">
         {SidebarContent}
@@ -125,7 +125,7 @@ export default function DashboardLayout({
 
       {/* Main content */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="bg-white border-b border-slate-200 sticky top-16 z-30">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3 min-w-0">
               <button

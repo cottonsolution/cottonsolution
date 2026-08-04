@@ -334,6 +334,17 @@ export function CloseIcon({ className }) {
   );
 }
 
+export function RefreshIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 4v5h5" />
+      <path d="M20 20v-5h-5" />
+      <path d="M5.5 9a7 7 0 0 1 12.5-3.5L20 9" />
+      <path d="M18.5 15a7 7 0 0 1-12.5 3.5L4 15" />
+    </svg>
+  );
+}
+
 export function BellIcon({ className }) {
   return (
     <svg className={className} {...base}>

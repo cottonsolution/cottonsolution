@@ -38,6 +38,7 @@ import {
   CheckCircleIcon,
   DocumentCheckIcon,
   GavelIcon,
+  RefreshIcon,
 } from "@/components/Icons";
 import ChatHub from "@/components/chat/ChatHub";
 import LoadChatButton from "@/components/chat/LoadChatButton";
@@ -46,7 +47,7 @@ import LoadBidsPanel from "@/components/merchant/LoadBidsPanel";
 import CallButton from "@/components/CallButton";
 import BiltyModal from "@/components/BiltyModal";
 import { subscribeToPush } from "@/lib/pushClient";
-import { submitBilty, approveArrival } from "@/lib/shipmentActions";
+import { submitBilty, approveArrival, approveWeighmentSlip, requestResubmitSlip } from "@/lib/shipmentActions";
 import { getRoadDistanceKm } from "@/lib/distance";
 import { estimateFare } from "@/lib/fareEstimate";
 
@@ -1230,17 +1231,30 @@ function ShipmentCard({ load, vehicle, bilty, merchantId, onChanged }) {
       {/* ---- Stage 2: Documentation — review weighment slip + fill/submit Bilty ---- */}
       {stage === 2 && (
         <div className="border-t border-slate-100 pt-4 space-y-3">
-          {load.weighment_slip_url ? (
-            <a href={load.weighment_slip_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
-              <EyeIcon className="w-4 h-4" /> View driver&apos;s weighment slip
-            </a>
-          ) : (
+          {!load.weighment_slip_url ? (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               Waiting for the driver to upload the weighment slip...
             </p>
+          ) : (
+            <>
+              <a href={load.weighment_slip_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
+                <EyeIcon className="w-4 h-4" /> View driver&apos;s weighment slip
+              </a>
+
+              {(!load.weighment_slip_status || load.weighment_slip_status === "pending") && (
+                <SlipReviewActions load={load} vehicle={vehicle} onDone={onChanged} />
+              )}
+
+              {load.weighment_slip_status === "resubmit_requested" && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  You asked the driver to re-upload the slip
+                  {load.weighment_slip_note ? <>: &ldquo;{load.weighment_slip_note}&rdquo;</> : "."} Waiting for the new photo...
+                </p>
+              )}
+            </>
           )}
 
-          {load.weighment_slip_url && bilty && bilty.status !== "submitted" && (
+          {load.weighment_slip_status === "approved" && bilty && bilty.status !== "submitted" && (
             <BiltyForm load={load} bilty={bilty} vehicle={vehicle} onSubmitted={onChanged} />
           )}
           {bilty?.status === "submitted" && (
@@ -1270,12 +1284,7 @@ function ShipmentCard({ load, vehicle, bilty, merchantId, onChanged }) {
             </a>
           )}
           {!load.merchant_approved_at ? (
-            <button
-              onClick={async () => approveArrival({ load, driverId: vehicle?.driver_id }).then(onChanged)}
-              className="btn-orange text-sm py-2"
-            >
-              <CheckCircleIcon className="w-4 h-4" /> Approve Delivery
-            </button>
+            <ApproveDeliveryButton load={load} vehicle={vehicle} onDone={onChanged} />
           ) : (
             <p className="text-xs text-green-700 flex items-center gap-1.5">
               <CheckCircleIcon className="w-3.5 h-3.5" /> Approved — waiting for the driver to close the trip.
@@ -1320,6 +1329,96 @@ function LiveTrackingWidget({ load, vehicle }) {
       driverName={vehicle.driver_name}
       vehicleNo={vehicle.vehicle_no}
     />
+  );
+}
+
+function SlipReviewActions({ load, vehicle, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [showNoteBox, setShowNoteBox] = useState(false);
+  const [note, setNote] = useState("");
+
+  async function handleApprove() {
+    setBusy(true);
+    setError("");
+    try {
+      await approveWeighmentSlip({ load, driverId: vehicle?.driver_id });
+      await onDone?.();
+    } catch (err) {
+      setError(err.message || "Could not approve the slip.");
+    }
+    setBusy(false);
+  }
+
+  async function handleRequestResubmit() {
+    setBusy(true);
+    setError("");
+    try {
+      await requestResubmitSlip({ load, driverId: vehicle?.driver_id, note: note.trim() });
+      setShowNoteBox(false);
+      setNote("");
+      await onDone?.();
+    } catch (err) {
+      setError(err.message || "Could not send the resubmit request.");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <button onClick={handleApprove} disabled={busy} className="btn-orange text-sm py-2">
+          <CheckCircleIcon className="w-4 h-4" /> {busy ? "Please wait..." : "Approve Slip"}
+        </button>
+        <button
+          onClick={() => setShowNoteBox((v) => !v)}
+          disabled={busy}
+          className="flex items-center gap-1.5 text-sm border border-red-200 text-red-600 rounded-lg px-3 py-2 font-semibold"
+        >
+          <RefreshIcon className="w-4 h-4" /> Request Resubmit
+        </button>
+      </div>
+      {showNoteBox && (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Reason (e.g. photo is blurry) — optional"
+            className="field-input flex-1"
+          />
+          <button onClick={handleRequestResubmit} disabled={busy} className="text-sm font-semibold text-red-600 border border-red-200 rounded-lg px-4 py-2 shrink-0">
+            {busy ? "Sending..." : "Send"}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-red-600 text-xs">{error}</p>}
+    </div>
+  );
+}
+
+function ApproveDeliveryButton({ load, vehicle, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleApprove() {
+    setBusy(true);
+    setError("");
+    try {
+      await approveArrival({ load, driverId: vehicle?.driver_id });
+      await onDone?.();
+    } catch (err) {
+      setError(err.message || "Could not approve the delivery.");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div>
+      <button onClick={handleApprove} disabled={busy} className="btn-orange text-sm py-2">
+        <CheckCircleIcon className="w-4 h-4" /> {busy ? "Please wait..." : "Approve Delivery"}
+      </button>
+      {error && <p className="text-red-600 text-xs mt-2">{error}</p>}
+    </div>
   );
 }
 

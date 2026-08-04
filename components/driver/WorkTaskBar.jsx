@@ -166,9 +166,13 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
   async function handleMarkOnTheWay() {
     setBusy(true);
     setError("");
-    await markOnTheWay({ load, merchantId: load.merchant_id });
+    try {
+      await markOnTheWay({ load, merchantId: load.merchant_id });
+      await refreshLoad();
+    } catch (err) {
+      setError(err.message || "Could not update trip status.");
+    }
     setBusy(false);
-    await refreshLoad();
   }
 
   async function handleUploadArrival(e) {
@@ -257,9 +261,17 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
                   {/* ---- Stage 2: Documentation ---- */}
                   {isCurrent && stage.value === 2 && (
                     <div className="mt-2 space-y-2">
-                      {!load.weighment_slip_url ? (
+                      {load.weighment_slip_status === "resubmit_requested" && (
+                        <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                          The merchant asked you to re-upload the slip
+                          {load.weighment_slip_note ? <>: &ldquo;{load.weighment_slip_note}&rdquo;</> : "."}
+                        </p>
+                      )}
+
+                      {!load.weighment_slip_url || load.weighment_slip_status === "resubmit_requested" ? (
                         <label className="btn-orange text-sm py-2 cursor-pointer inline-flex">
-                          <UploadIcon className="w-4 h-4" /> {busy ? "Uploading..." : "Upload Weighment Slip"}
+                          <UploadIcon className="w-4 h-4" />{" "}
+                          {busy ? "Uploading..." : load.weighment_slip_url ? "Re-upload Weighment Slip" : "Upload Weighment Slip"}
                           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleUploadSlip} disabled={busy} />
                         </label>
                       ) : (
@@ -268,9 +280,15 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
                         </p>
                       )}
 
-                      {load.weighment_slip_url && !biltySubmitted && (
+                      {load.weighment_slip_url && load.weighment_slip_status !== "resubmit_requested" && load.weighment_slip_status !== "approved" && (
                         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
-                          <ClockIcon className="w-3.5 h-3.5 shrink-0" /> Waiting for the merchant to submit the Bilty...
+                          <ClockIcon className="w-3.5 h-3.5 shrink-0" /> Waiting for the merchant to review the slip...
+                        </p>
+                      )}
+
+                      {load.weighment_slip_status === "approved" && !biltySubmitted && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                          <ClockIcon className="w-3.5 h-3.5 shrink-0" /> Slip approved — waiting for the merchant to submit the Bilty...
                         </p>
                       )}
 

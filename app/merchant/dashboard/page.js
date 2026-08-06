@@ -253,7 +253,7 @@ function MerchantGridMenu({ open, onClose, activeTab, counts, onSelect, onLogout
 
   return (
     <div
-      className={`fixed inset-0 z-[70] app-scroll overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50 transition-all duration-300 ease-out ${
+      className={`fixed left-0 right-0 bottom-0 top-16 sm:top-20 z-[70] app-scroll overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50 transition-all duration-300 ease-out ${
         open ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
       aria-hidden={!open}
@@ -280,7 +280,7 @@ function MerchantGridMenu({ open, onClose, activeTab, counts, onSelect, onLogout
                 onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
                 className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
                   isActive ? "ring-2 ring-brand-orange" : ""
-                }`}
+                } ${box.isLogout ? "col-start-2" : ""}`}
               >
                 {/* Glossy top highlight — gives each box a soft glass/premium sheen */}
                 <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />

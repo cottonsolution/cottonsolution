@@ -90,7 +90,7 @@ export default function WorkTaskBar({ loads, driverId, onChanged }) {
   );
 }
 
-export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
+export function TripTrackerModal({ load, driverId, onClose, onChanged, autoOpenChat, onChatOpened }) {
   const current = effectiveStage(load);
   const [busy, setBusy] = useState(false);
   const [bilty, setBilty] = useState(null);
@@ -219,6 +219,8 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
               label=""
               counterpartLabel="Chat with Merchant"
               className="w-9 h-9 flex items-center justify-center rounded-full text-brand-orange bg-brand-orange/10"
+              autoOpen={autoOpenChat}
+              onOpened={onChatOpened}
             />
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-slate-400" aria-label="Close">
               <CloseIcon className="w-5 h-5" />

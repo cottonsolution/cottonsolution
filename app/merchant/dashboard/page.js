@@ -57,21 +57,26 @@ const MiniMapPreview = dynamic(() => import("@/components/MiniMapPreview"), { ss
 
 const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIcon, Maize: WheatIcon, Rice: WheatIcon, Sugarcane: WheatIcon, Other: TruckIcon };
 
-// The merchant's slide-in drawer menu — order, emoji, and live count keys
-// exactly as agreed. `emoji` renders as the OS's native "semi-realistic 3D"
-// emoji (Apple/Android/Windows all render these the same visual style),
-// which is what the reference mockup used, so no custom icon assets needed.
+// The merchant's full-screen grid menu — order, emoji, Urdu label, and live
+// count keys exactly as agreed. `emoji` renders as the OS's native
+// "semi-realistic 3D" emoji (Apple/Android/Windows all render these the same
+// visual style), which is what the reference mockup used, so no custom icon
+// assets needed.
 const TABS = [
-  { label: "Post a Load", emoji: "📦", countKey: "post" },
-  { label: "Active Shipments", emoji: "🚛", countKey: "active" },
-  { label: "Bids & Offers", emoji: "🤝", countKey: "bids" },
-  { label: "Shipment History", emoji: "📋" },
-  { label: "Verify a Vehicle", emoji: "🛡️" },
-  { label: "Billing & Payments", emoji: "💵" },
-  { label: "Terms and Conditions", emoji: "📜" },
-  { label: "Company Profile", emoji: "🏢" },
-  { label: "Help & Support", emoji: "🎧" },
+  { label: "Post a Load", urdu: "نیا لوڈ پوسٹ کریں", emoji: "📦", countKey: "post", tint: "bg-sky-100" },
+  { label: "Active Shipments", urdu: "جاری شپمنٹس", emoji: "🚛", countKey: "active", tint: "bg-orange-50" },
+  { label: "Bids & Offers", urdu: "بولیاں اور آفرز", emoji: "🤝", countKey: "bids", tint: "bg-orange-50" },
+  { label: "Shipment History", urdu: "شپمنٹ ہسٹری", emoji: "📋", tint: "bg-sky-100" },
+  { label: "Verify a Vehicle", urdu: "گاڑی کی تصدیق کریں", emoji: "🛡️", tint: "bg-sky-100" },
+  { label: "Billing & Payments", urdu: "بلنگ اور ادائیگیاں", emoji: "💵", tint: "bg-orange-50" },
+  { label: "Terms and Conditions", urdu: "شرائط و ضوابط", emoji: "📜", tint: "bg-orange-50" },
+  { label: "Company Profile", urdu: "کمپنی پروفائل", emoji: "🏢", tint: "bg-sky-100" },
+  { label: "Help & Support", urdu: "مدد اور سپورٹ", emoji: "🎧", tint: "bg-orange-50" },
 ];
+
+// Rendered as the 10th box — first item of the grid's 4th row — instead of
+// the old separate full-width Logout button.
+const LOGOUT_BOX = { label: "Log out", urdu: "لاگ آؤٹ", emoji: "🚪", tint: "bg-orange-50", isLogout: true };
 
 export default function MerchantDashboardPage() {
   const router = useRouter();
@@ -181,7 +186,7 @@ export default function MerchantDashboardPage() {
         />
       )}
 
-      <div className="flex items-center justify-between gap-3 mb-4 sm:mb-8">
+      <div className="relative z-[90] flex items-center justify-between gap-3 mb-4 sm:mb-8">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => setDrawerOpen(true)}
@@ -199,7 +204,7 @@ export default function MerchantDashboardPage() {
         <NotificationBell userId={user.id} onOpenLoad={handleOpenLoadFromNotification} />
       </div>
 
-      <MerchantDrawer
+      <MerchantGridMenu
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         activeTab={activeTab}
@@ -227,59 +232,63 @@ export default function MerchantDashboardPage() {
 }
 
 /**
- * Slide-in drawer navigation — left-edge slide-in overlay, dark-navy
- * "MERCHANT MENU" styling matching the agreed reference mockup. This is the
- * single navigation surface for the whole merchant dashboard (mobile and
- * desktop alike), so switching sections and logging out are always exactly
- * one tap away behind the same hamburger button.
+ * Full-screen grid navigation — replaces the old dark slide-in drawer.
+ * Opens as a full-screen overlay from the hamburger button (same trigger,
+ * same z-index layer), light blue/cream 3-column grid of tappable boxes
+ * with a semi-realistic 3D emoji + English label + Urdu label each, matching
+ * the agreed reference mockup. Logout is the 10th box (first item of row 4)
+ * instead of a separate full-width button. Tapping any box closes the grid
+ * and switches to that section — the header's hamburger button stays
+ * visible on every section afterwards, so it doubles as the "back to menu"
+ * control the same way it always reopened the old drawer.
  */
-function MerchantDrawer({ open, onClose, activeTab, counts, onSelect, onLogout }) {
+function MerchantGridMenu({ open, onClose, activeTab, counts, onSelect, onLogout }) {
+  if (!open) return null;
+  const boxes = [...TABS, LOGOUT_BOX];
+
   return (
-    <div className={`fixed inset-0 z-[70] ${open ? "" : "pointer-events-none"}`} aria-hidden={!open}>
-      <div
-        className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${open ? "opacity-100" : "opacity-0"}`}
-        onClick={onClose}
-      />
-      <aside
-        className={`absolute left-0 top-0 bottom-0 w-[280px] max-w-[85vw] bg-[#0e1b2e] shadow-2xl flex flex-col transition-transform duration-300 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="px-5 pt-6 pb-4 shrink-0">
-          <p className="text-[11px] font-bold tracking-widest text-slate-400">MERCHANT MENU</p>
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50">
+      <div className="max-w-md mx-auto px-4 pt-6 pb-10">
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-sm font-bold tracking-wide text-brand-navy">Merchant Menu</p>
+          <button
+            onClick={onClose}
+            aria-label="Close menu"
+            className="w-9 h-9 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500"
+          >
+            <CloseIcon className="w-4 h-4" />
+          </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 space-y-1 pb-3">
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.label;
-            const count = tab.countKey ? counts[tab.countKey] : null;
+        <div className="grid grid-cols-3 gap-3">
+          {boxes.map((box) => {
+            const isActive = !box.isLogout && activeTab === box.label;
+            const count = box.countKey ? counts[box.countKey] : null;
             return (
               <button
-                key={tab.label}
-                onClick={() => onSelect(tab.label)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-colors ${
-                  isActive ? "bg-white/10" : "hover:bg-white/5"
+                key={box.label}
+                onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
+                className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center shadow-sm transition-transform active:scale-95 ${box.tint} ${
+                  isActive ? "ring-2 ring-brand-orange" : ""
                 }`}
               >
-                <span className="text-2xl shrink-0 leading-none">{tab.emoji}</span>
-                <span className="flex-1 min-w-0 font-semibold text-white text-[15px] truncate">{tab.label}</span>
                 {count != null && count > 0 && (
-                  <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-brand-orange text-white">
+                  <span className="absolute top-1.5 right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
                     {count}
                   </span>
                 )}
+                <span className="text-4xl leading-none">{box.emoji}</span>
+                <span className={`font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
+                  {box.label}
+                </span>
+                <span className="text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
+                  {box.urdu}
+                </span>
               </button>
             );
           })}
-        </nav>
-
-        <div className="px-3 pb-6 pt-2 border-t border-white/10 shrink-0">
-          <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left hover:bg-white/5">
-            <span className="text-2xl shrink-0 leading-none">🚪</span>
-            <span className="font-semibold text-red-400 text-[15px]">Log out</span>
-          </button>
         </div>
-      </aside>
+      </div>
     </div>
   );
 }

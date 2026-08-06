@@ -42,6 +42,7 @@ import {
 } from "@/components/Icons";
 import NotificationBell from "@/components/NotificationBell";
 import LoadChatButton from "@/components/chat/LoadChatButton";
+import ChatModal from "@/components/chat/ChatModal";
 import LoadAcceptedAlert from "@/components/merchant/LoadAcceptedAlert";
 import LoadBidsPanel from "@/components/merchant/LoadBidsPanel";
 import CallButton from "@/components/CallButton";

@@ -24,6 +24,8 @@ import {
   ClockIcon,
   PhoneIcon,
   ChatIcon,
+  MoonIcon,
+  RadarIcon,
 } from "@/components/Icons";
 import ModeSwitcher from "@/components/driver/ModeSwitcher";
 import WorkTaskBar, { TripTrackerModal } from "@/components/driver/WorkTaskBar";
@@ -502,7 +504,7 @@ function DashboardHome({ mode, myVehicle, workLoads, driverId, onChanged, positi
       <p className="font-bold text-brand-navy text-lg mb-1">You&apos;re Resting</p>
       <p className="text-sm text-slate-500 max-w-xs mx-auto">
         You&apos;re marked offline and won&apos;t receive new load alerts. Switch to
-        &quot;Find Loads&quot; when you&apos;re ready to go back on duty.
+        &quot;Work Mode&quot; when you&apos;re ready to go back on duty.
       </p>
     </div>
   );

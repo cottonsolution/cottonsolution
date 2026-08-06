@@ -202,7 +202,7 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged, autoOpenC
   const biltySubmitted = bilty?.status === "submitted";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">

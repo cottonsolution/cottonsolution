@@ -934,7 +934,7 @@ function BidsOffersList({ merchantId }) {
 
 function ModalShell({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
@@ -1674,6 +1674,14 @@ function ShipmentHistory({ merchantId }) {
                     {bilty && (
                       <BiltyHistoryButton bilty={bilty} load={l} />
                     )}
+                    <LoadChatButton
+                      loadId={l.id}
+                      currentUserId={merchantId}
+                      label="Chat"
+                      counterpartLabel={`Chat with ${vehicle?.driver_name || "Driver"}`}
+                      phone={vehicle?.mobile_no}
+                      className="flex items-center gap-1.5 text-xs font-semibold border border-slate-300 rounded-lg px-3 py-2 text-slate-600"
+                    />
                   </div>
                 </div>
               )}

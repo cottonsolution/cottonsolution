@@ -6,7 +6,7 @@ import ChatThread from "./ChatThread";
 
 export default function ChatModal({ title, subtitle, phone, onClose, ...threadProps }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl h-[85vh] sm:h-[600px] flex flex-col overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 shrink-0">

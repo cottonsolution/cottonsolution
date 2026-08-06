@@ -16,22 +16,21 @@ import {
   ShieldCheckIcon,
   WalletIcon,
   TruckCheckIcon,
-  MenuIcon,
   CloseIcon,
-  LogoutIcon,
-  MoonIcon,
-  RadarIcon,
   MapPinIcon,
   IdCardIcon,
   CheckCircleIcon,
-  ChatIcon,
   GavelIcon,
   ClockIcon,
+  PhoneIcon,
+  ChatIcon,
+  MoonIcon,
+  RadarIcon,
 } from "@/components/Icons";
 import ModeSwitcher from "@/components/driver/ModeSwitcher";
 import WorkTaskBar, { TripTrackerModal } from "@/components/driver/WorkTaskBar";
 import LoadAlertOverlay from "@/components/driver/LoadAlertOverlay";
-import ChatHub from "@/components/chat/ChatHub";
+import NotificationBell from "@/components/NotificationBell";
 import { subscribeToPush } from "@/lib/pushClient";
 import { notifyMerchantLoadAccepted } from "@/lib/shipmentActions";
 
@@ -41,19 +40,33 @@ const DriverMap = dynamic(() => import("@/components/driver/DriverMap"), { ssr: 
 
 const SEARCH_RADIUS_KM = 60;
 
+// The driver's full-screen grid menu — same style as the Merchant Dashboard:
+// emoji renders as the OS's native "semi-realistic 3D" icon, English label,
+// Urdu label, alternating light-blue/cream tile.
 const TABS = [
-  { label: "Dashboard", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
-  { label: "Available Loads", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
-  { label: "My Trips", icon: RouteIcon, from: "#4ade80", to: "#15803d" },
-  { label: "Messages", icon: ChatIcon, from: "#f472b6", to: "#be185d" },
-  { label: "My Truck", icon: IdCardIcon, from: "#fb923c", to: "#c2410c" },
+  { label: "Find a Load", urdu: "لوڈ تلاش کریں", emoji: "🗺️", tint: "bg-sky-100" },
+  { label: "Available Loads", urdu: "دستیاب لوڈز", emoji: "📋", tint: "bg-orange-50" },
+  { label: "Active Trip", urdu: "فعال ٹرپ", emoji: "🚚", tint: "bg-orange-50" },
+  { label: "Trip History", urdu: "ٹرپ ہسٹری", emoji: "🗂️", tint: "bg-sky-100" },
+  { label: "My Truck", urdu: "میری گاڑی", emoji: "🪪", tint: "bg-orange-50" },
+  { label: "Billing & Payments", urdu: "بلنگ اور ادائیگیاں", emoji: "💵", tint: "bg-sky-100" },
+  { label: "Help & Support", urdu: "مدد اور سپورٹ", emoji: "🎧", tint: "bg-orange-50" },
 ];
+
+const LOGOUT_BOX = { label: "Log out", urdu: "لاگ آؤٹ", emoji: "🚪", tint: "bg-orange-50", isLogout: true };
 
 export default function DriverDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // The full grid is the driver's home screen too — open by default the
+  // moment the dashboard mounts (right after login, and again on every
+  // refresh), matching the Merchant Dashboard.
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  // Set by the notification bell: { loadId, nonce } — ActiveTrip watches this
+  // and auto-opens that load's tracker + chat. `nonce` changes on every
+  // click so re-tapping the same notification still re-triggers it.
+  const [jumpTarget, setJumpTarget] = useState(null);
 
   const [myVehicle, setMyVehicle] = useState(null);
   const [mode, setMode] = useState("resting");
@@ -65,13 +78,8 @@ export default function DriverDashboardPage() {
   const seenLoadIds = useRef(new Set());
 
   useEffect(() => {
-    if (loading) return;
-    if (!user || profile?.role !== "driver") {
+    if (!loading && (!user || profile?.role !== "driver")) {
       router.push("/login");
-      return;
-    }
-    if (profile.is_profile_completed === false) {
-      router.push("/onboarding/driver");
     }
   }, [loading, user, profile, router]);
 
@@ -93,7 +101,7 @@ export default function DriverDashboardPage() {
 
   async function handleModeChange(nextMode) {
     if (!myVehicle) {
-      setActiveTab("Dashboard");
+      setActiveTab("Find a Load");
       return;
     }
     setMode(nextMode); // optimistic — instant tap feedback matters most for this audience
@@ -209,7 +217,7 @@ export default function DriverDashboardPage() {
     setAlertLoad(null);
     await refreshWorkLoads();
     handleModeChange("working");
-    setActiveTab("Dashboard");
+    setActiveTab("Find a Load");
     notifyMerchantLoadAccepted({ load: updated, merchantId: updated.merchant_id, vehicle: myVehicle });
   }
 
@@ -218,151 +226,228 @@ export default function DriverDashboardPage() {
     router.push("/login");
   }
 
-  if (loading || !user || profile?.role !== "driver" || profile.is_profile_completed === false) return null;
+  function handleOpenLoadFromNotification(loadId) {
+    setActiveTab("Active Trip");
+    setDrawerOpen(false);
+    setJumpTarget({ loadId, nonce: Date.now() });
+  }
 
-  const activeMeta = TABS.find((t) => t.label === activeTab);
+  if (loading || !user || profile?.role !== "driver") return null;
 
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+    <section className="app-scroll max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
       {alertLoad && (
         <LoadAlertOverlay load={alertLoad} onAccept={acceptLoad} onDismiss={() => setAlertLoad(null)} />
       )}
 
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <span className="icon-tile w-12 h-12" style={{ "--tile-from": "#4ade80", "--tile-to": "#15803d" }}>
-            <TruckIcon className="w-6 h-6 text-white" />
-          </span>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-brand-navy leading-tight">Driver Dashboard</h1>
-            <p className="text-slate-500 text-sm hidden sm:block">Set your status, find loads, and manage trips.</p>
+      <div className="sticky top-0 z-[90] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 mb-4 sm:mb-8 flex items-center justify-between gap-4 bg-white/85 backdrop-blur-md border-b border-slate-100">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 text-xl touch-manipulation select-none"
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
+          <div className="min-w-0 mr-2">
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-brand-navy leading-tight truncate">{activeTab}</h1>
+            <p className="text-slate-500 text-sm hidden sm:block truncate">Smart Goods Transport Company — Driver Dashboard</p>
           </div>
         </div>
 
-        <button
-          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open menu"
-        >
-          <MenuIcon className="w-5 h-5" />
-        </button>
+        <div className="shrink-0">
+          <NotificationBell userId={user.id} onOpenLoad={handleOpenLoadFromNotification} />
+        </div>
       </div>
 
-      {!myVehicle && (
-        <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
-          <ShieldCheckIcon className="w-4 h-4 shrink-0" />
-          You haven&apos;t registered a vehicle yet.{" "}
-          <a href="/register" className="font-semibold underline">Register now</a> to switch modes and receive loads.
-        </p>
-      )}
+      <DriverGridMenu
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        activeTab={activeTab}
+        onSelect={(label) => {
+          setActiveTab(label);
+          setDrawerOpen(false);
+        }}
+        onLogout={handleLogout}
+      />
 
-      {/* MODE SWITCHER — pinned above everything, always visible regardless of tab */}
-      <div className="mb-6">
-        <ModeSwitcher mode={mode} onChange={handleModeChange} disabled={!myVehicle || modeSaving} />
-      </div>
-
-      <div className="flex gap-6 items-start">
-        {/* DESKTOP SIDEBAR — mirrors the Admin Dashboard's navigation structure */}
-        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white rounded-2xl shadow-card p-3 sticky top-24 gap-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab.label}
-              onClick={() => setActiveTab(tab.label)}
-              className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
-            >
-              <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
-                <tab.icon className="w-5 h-5 text-white" />
-              </span>
-              {tab.label}
-            </button>
-          ))}
-          <div className="border-t border-slate-100 mt-2 pt-2">
-            <button onClick={handleLogout} className="admin-sidebar-link text-red-500 hover:bg-red-50 w-full">
-              <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
-                <LogoutIcon className="w-5 h-5 text-white" />
-              </span>
-              Logout
-            </button>
-          </div>
-        </aside>
-
-        {/* MOBILE DRAWER */}
-        {drawerOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-            <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl p-4 flex flex-col gap-1 animate-[slideIn_0.25s_ease-out]">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-bold text-brand-navy">Menu</span>
-                <button onClick={() => setDrawerOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400">
-                  <CloseIcon className="w-5 h-5" />
-                </button>
-              </div>
-              {TABS.map((tab) => (
-                <button
-                  key={tab.label}
-                  onClick={() => {
-                    setActiveTab(tab.label);
-                    setDrawerOpen(false);
-                  }}
-                  className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
-                >
-                  <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
-                    <tab.icon className="w-5 h-5 text-white" />
-                  </span>
-                  {tab.label}
-                </button>
-              ))}
-              <div className="border-t border-slate-100 mt-2 pt-2">
-                <button onClick={handleLogout} className="admin-sidebar-link text-red-500 w-full">
-                  <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
-                    <LogoutIcon className="w-5 h-5 text-white" />
-                  </span>
-                  Logout
-                </button>
-              </div>
-            </aside>
-          </div>
+      {/* Hidden (display:none, not just covered) while the grid menu is open —
+          this is what actually stops the Leaflet map from ever bleeding
+          through on top of the grid, since display:none can't be beaten by
+          any z-index/stacking edge case the way opacity/covering can. */}
+      <div className={drawerOpen ? "hidden" : ""}>
+        {!myVehicle && (
+          <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
+            <ShieldCheckIcon className="w-4 h-4 shrink-0" />
+            You haven&apos;t registered a vehicle yet.{" "}
+            <a href="/register" className="font-semibold underline">Register now</a> to switch modes and receive loads.
+          </p>
         )}
 
-        {/* CONTENT */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-6 lg:hidden overflow-x-auto pb-1">
-            <span className="icon-tile w-9 h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
-              <activeMeta.icon className="w-4 h-4 text-white" />
-            </span>
-            <h2 className="font-bold text-brand-navy whitespace-nowrap">{activeTab}</h2>
-          </div>
-
-          {activeTab === "Dashboard" && (
-            <DashboardHome
-              mode={mode}
-              myVehicle={myVehicle}
-              workLoads={workLoads}
-              driverId={user.id}
-              onChanged={refreshWorkLoads}
-              position={position}
-              locationError={locationError}
-              nearbyLoads={nearbyLoads}
-              onAccept={acceptLoad}
-            />
-          )}
-          {activeTab === "Available Loads" && (
-            <AvailableLoads
-              driverId={user.id}
-              vehicle={myVehicle}
-              onAccepted={async () => {
-                await refreshWorkLoads();
-                handleModeChange("working");
-                setActiveTab("Dashboard");
-              }}
-            />
-          )}
-          {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} driverId={user.id} />}
-          {activeTab === "Messages" && <ChatHub userId={user.id} role="driver" vehicleId={myVehicle?.id} />}
-          {activeTab === "My Truck" && <TruckProfile vehicle={myVehicle} onUpdated={refreshVehicle} />}
+        {/* MODE SWITCHER — pinned above everything, always visible regardless of tab */}
+        <div className="mb-6">
+          <ModeSwitcher mode={mode} onChange={handleModeChange} disabled={!myVehicle || modeSaving} />
         </div>
+
+        {activeTab === "Find a Load" && (
+          <DashboardHome
+            mode={mode}
+            myVehicle={myVehicle}
+            workLoads={workLoads}
+            driverId={user.id}
+            onChanged={refreshWorkLoads}
+            position={position}
+            locationError={locationError}
+            nearbyLoads={nearbyLoads}
+            onAccept={acceptLoad}
+          />
+        )}
+        {activeTab === "Available Loads" && (
+          <AvailableLoads
+            driverId={user.id}
+            vehicle={myVehicle}
+            onAccepted={async () => {
+              await refreshWorkLoads();
+              handleModeChange("working");
+              setActiveTab("Find a Load");
+            }}
+          />
+        )}
+        {activeTab === "Active Trip" && <ActiveTrip vehicle={myVehicle} driverId={user.id} jumpTarget={jumpTarget} />}
+        {activeTab === "Trip History" && <TripHistory vehicle={myVehicle} driverId={user.id} />}
+        {activeTab === "My Truck" && <TruckProfile vehicle={myVehicle} onUpdated={refreshVehicle} />}
+        {activeTab === "Billing & Payments" && <BillingPayments />}
+        {activeTab === "Help & Support" && <HelpSupport />}
       </div>
     </section>
+  );
+}
+
+/**
+ * Full-screen grid navigation — identical style/behaviour to the Merchant
+ * Dashboard's grid: light blue/cream 3-column grid, semi-realistic 3D emoji
+ * + English + Urdu label per box, Logout as the 10th box (row 4, centred),
+ * smooth fade+scale open/close, glossy premium tiles, lift-up tap feedback.
+ * Positioned to start just below the sticky header (not overlapping it).
+ */
+function DriverGridMenu({ open, onClose, activeTab, onSelect, onLogout }) {
+  const boxes = [...TABS, LOGOUT_BOX];
+
+  return (
+    <div
+      className={`fixed left-0 right-0 bottom-0 top-16 sm:top-20 z-[70] app-scroll overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50 transition-all duration-300 ease-out ${
+        open ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+      aria-hidden={!open}
+    >
+      <div className={`max-w-md mx-auto px-4 pt-6 pb-10 transition-all duration-300 ease-out ${open ? "translate-y-0 scale-100" : "translate-y-2 scale-[0.98]"}`}>
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-sm font-bold tracking-wide text-brand-navy">Driver Menu</p>
+          <button
+            onClick={onClose}
+            aria-label="Close menu"
+            className="w-9 h-9 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500 touch-manipulation select-none"
+          >
+            <CloseIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          {boxes.map((box) => {
+            const isActive = !box.isLogout && activeTab === box.label;
+            return (
+              <button
+                key={box.label}
+                onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
+                className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
+                  isActive ? "ring-2 ring-brand-orange" : ""
+                } ${box.isLogout ? "col-start-2" : ""}`}
+              >
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />
+                <span className="relative text-4xl leading-none drop-shadow-sm">{box.emoji}</span>
+                <span className={`relative font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
+                  {box.label}
+                </span>
+                <span className="relative text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
+                  {box.urdu}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Static, bilingual "free for now" notice — identical framing to the Merchant Dashboard's Billing & Payments tab. */
+function BillingPayments() {
+  return (
+    <div className="card max-w-lg space-y-5">
+      <div className="flex items-center gap-3">
+        <span className="icon-badge bg-green-500/10 text-green-600 w-11 h-11 rounded-xl">
+          <WalletIcon className="w-5 h-5" />
+        </span>
+        <h3 className="font-bold text-brand-navy text-lg">Billing & Payments</h3>
+      </div>
+      <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+        <p className="font-semibold text-green-800">
+          This service is currently free for trucks and drivers on the Smart Goods Transport Company platform. There are no
+          subscription fees, commission charges, or hidden costs at this time.
+        </p>
+      </div>
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4" dir="rtl" lang="ur">
+        <p className="font-semibold text-slate-700">
+          یہ سروس فی الحال Smart Goods Transport Company کے پلیٹ فارم پر ٹرکس اور ڈرائیورز کے لیے مکمل طور پر مفت ہے۔ اس وقت کوئی
+          سبسکرپشن فیس، کمیشن، یا کوئی چھپی ہوئی لاگت نہیں ہے۔
+        </p>
+      </div>
+      <p className="text-xs text-slate-400">Pricing may be introduced in the future — you will be notified in advance before any charges apply.</p>
+    </div>
+  );
+}
+
+/** Reuses the same public Contact Us info the Admin panel manages — identical to the Merchant Dashboard's Help & Support tab. */
+function HelpSupport() {
+  const [contact, setContact] = useState(null);
+
+  useEffect(() => {
+    supabase.from("contact_info").select("*").eq("id", 1).maybeSingle().then(({ data }) => setContact(data ?? null));
+  }, []);
+
+  return (
+    <div className="card max-w-lg space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl">
+          <ChatIcon className="w-5 h-5" />
+        </span>
+        <h3 className="font-bold text-brand-navy text-lg">Help & Support</h3>
+      </div>
+      <p className="text-sm text-slate-500">Need help with a load, your account, or anything else? Reach out any time.</p>
+      <div className="space-y-3">
+        {contact?.phone && (
+          <a href={`tel:${contact.phone}`} className="flex items-center gap-3 text-sm font-semibold text-brand-navy">
+            <PhoneIcon className="w-4 h-4 text-brand-orange shrink-0" /> {contact.phone}
+          </a>
+        )}
+        {contact?.whatsapp && (
+          <a href={`https://wa.me/${contact.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 text-sm font-semibold text-brand-navy">
+            <ChatIcon className="w-4 h-4 text-green-600 shrink-0" /> WhatsApp: {contact.whatsapp}
+          </a>
+        )}
+        {contact?.email && (
+          <a href={`mailto:${contact.email}`} className="flex items-center gap-3 text-sm font-semibold text-brand-navy">
+            <ChatIcon className="w-4 h-4 text-brand-orange shrink-0" /> {contact.email}
+          </a>
+        )}
+        {contact?.address && (
+          <p className="flex items-start gap-3 text-sm text-slate-600">
+            <MapPinIcon className="w-4 h-4 text-brand-orange shrink-0 mt-0.5" /> {contact.address}
+          </p>
+        )}
+        {!contact && <p className="text-sm text-slate-400">Loading contact details…</p>}
+      </div>
+    </div>
   );
 }
 
@@ -427,7 +512,7 @@ function DashboardHome({ mode, myVehicle, workLoads, driverId, onChanged, positi
       <p className="font-bold text-brand-navy text-lg mb-1">You&apos;re Resting</p>
       <p className="text-sm text-slate-500 max-w-xs mx-auto">
         You&apos;re marked offline and won&apos;t receive new load alerts. Switch to
-        &quot;Find Loads&quot; when you&apos;re ready to go back on duty.
+        &quot;Work Mode&quot; when you&apos;re ready to go back on duty.
       </p>
     </div>
   );
@@ -716,9 +801,10 @@ function VehicleDetail({ icon: Icon, label, value }) {
   );
 }
 
-function MyTrips({ vehicle, driverId }) {
+function ActiveTrip({ vehicle, driverId, jumpTarget }) {
   const [loads, setLoads] = useState([]);
   const [openLoad, setOpenLoad] = useState(null);
+  const [autoOpenChatId, setAutoOpenChatId] = useState(null);
 
   async function refresh() {
     if (!vehicle) return;
@@ -726,6 +812,7 @@ function MyTrips({ vehicle, driverId }) {
       .from("loads")
       .select("*")
       .eq("assigned_vehicle_id", vehicle.id)
+      .neq("status", "delivered")
       .order("created_at", { ascending: false });
     setLoads(data ?? []);
   }
@@ -734,7 +821,7 @@ function MyTrips({ vehicle, driverId }) {
   useEffect(() => {
     if (!vehicle) return undefined;
     const channel = supabase
-      .channel(`my-trips-${vehicle.id}`)
+      .channel(`active-trip-${vehicle.id}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "loads", filter: `assigned_vehicle_id=eq.${vehicle.id}` },
@@ -745,11 +832,21 @@ function MyTrips({ vehicle, driverId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle]);
 
+  // Notification bell deep-link: jump straight to this load's tracker + chat.
+  useEffect(() => {
+    if (!jumpTarget?.loadId) return;
+    const match = loads.find((l) => l.id === jumpTarget.loadId);
+    if (match) {
+      setOpenLoad(match);
+      setAutoOpenChatId(jumpTarget.loadId);
+    }
+  }, [jumpTarget, loads]);
+
   return (
     <div className="space-y-3">
       {(!vehicle || loads.length === 0) && (
         <p className="text-slate-400 text-sm flex items-center gap-2">
-          <RouteIcon className="w-4 h-4" /> No active trips yet.
+          <RouteIcon className="w-4 h-4" /> No active trips right now — accepted loads will show up here.
         </p>
       )}
       {loads.map((l) => {
@@ -779,6 +876,70 @@ function MyTrips({ vehicle, driverId }) {
           </button>
         );
       })}
+
+      {openLoad && (
+        <TripTrackerModal
+          load={openLoad}
+          driverId={driverId}
+          onClose={() => setOpenLoad(null)}
+          autoOpenChat={autoOpenChatId === openLoad.id}
+          onChatOpened={() => setAutoOpenChatId(null)}
+          onChanged={async (fresh) => {
+            setOpenLoad(fresh);
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Completed (delivered) trips for the driver's truck — separated from ActiveTrip so finished work doesn't clutter the in-progress list. */
+function TripHistory({ vehicle, driverId }) {
+  const [loads, setLoads] = useState([]);
+  const [openLoad, setOpenLoad] = useState(null);
+
+  async function refresh() {
+    if (!vehicle) return;
+    const { data } = await supabase
+      .from("loads")
+      .select("*")
+      .eq("assigned_vehicle_id", vehicle.id)
+      .eq("status", "delivered")
+      .order("created_at", { ascending: false });
+    setLoads(data ?? []);
+  }
+  useEffect(() => { refresh(); }, [vehicle]);
+
+  return (
+    <div className="space-y-3">
+      {(!vehicle || loads.length === 0) && (
+        <p className="text-slate-400 text-sm flex items-center gap-2">
+          <ClockIcon className="w-4 h-4" /> No completed trips yet — finished deliveries will show up here.
+        </p>
+      )}
+      {loads.map((l) => (
+        <button
+          key={l.id}
+          onClick={() => setOpenLoad(l)}
+          className="w-full text-left card flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:ring-2 hover:ring-brand-orange/40 transition-shadow"
+        >
+          <div className="flex items-center gap-3">
+            <span className="icon-badge bg-green-500/10 text-green-600 w-11 h-11 rounded-xl">
+              <CheckCircleIcon className="w-5 h-5" />
+            </span>
+            <div>
+              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}</p>
+              <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 badge-valid shrink-0 bg-green-50 text-green-700">
+            <CheckCircleIcon className="w-3.5 h-3.5" /> Completed — {new Date(l.created_at).toLocaleDateString()}
+          </span>
+        </button>
+      ))}
 
       {openLoad && (
         <TripTrackerModal

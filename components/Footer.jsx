@@ -59,7 +59,7 @@ export default function Footer() {
   // Admin/Merchant/Driver dashboards are a fixed app-shell (DashboardLayout)
   // that renders its own copyright line inside the scrollable content pane —
   // rendering anything here too would duplicate it and break the fixed layout.
-  const isDashboardRoute = /^\/(admin|merchant|driver|onboarding)(\/|$)/.test(pathname);
+  const isDashboardRoute = /^\/(admin|merchant|driver)(\/|$)/.test(pathname);
   if (isDashboardRoute) return null;
 
   const activeSocials = SOCIAL_LINKS_META.filter((s) => contact[s.key]);

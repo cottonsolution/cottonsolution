@@ -90,7 +90,7 @@ export default function WorkTaskBar({ loads, driverId, onChanged }) {
   );
 }
 
-export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
+export function TripTrackerModal({ load, driverId, onClose, onChanged, autoOpenChat, onChatOpened }) {
   const current = effectiveStage(load);
   const [busy, setBusy] = useState(false);
   const [bilty, setBilty] = useState(null);
@@ -202,7 +202,7 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
   const biltySubmitted = bilty?.status === "submitted";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
@@ -219,6 +219,8 @@ export function TripTrackerModal({ load, driverId, onClose, onChanged }) {
               label=""
               counterpartLabel="Chat with Merchant"
               className="w-9 h-9 flex items-center justify-center rounded-full text-brand-orange bg-brand-orange/10"
+              autoOpen={autoOpenChat}
+              onOpened={onChatOpened}
             />
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-slate-400" aria-label="Close">
               <CloseIcon className="w-5 h-5" />

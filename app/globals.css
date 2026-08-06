@@ -10,6 +10,20 @@ html {
 
 body {
   @apply font-body text-slate-800 bg-brand-slate overflow-x-hidden;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+/* Reusable "app-like" scroll surface — keeps scrolling but hides the
+   browser's own scrollbar chrome, since a visible desktop-style scrollbar
+   is the single biggest tell that breaks the native-app illusion on a
+   full-screen mobile view. */
+.app-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.app-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 h1, h2, h3, h4 {

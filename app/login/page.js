@@ -11,6 +11,11 @@ const ROLE_REDIRECT = {
   driver: "/driver/dashboard",
 };
 
+const ONBOARDING_REDIRECT = {
+  merchant: "/onboarding/merchant",
+  driver: "/onboarding/driver",
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState("login"); // "login" | "signup"
@@ -36,7 +41,7 @@ export default function LoginPage() {
   async function redirectByRole(userId) {
     let { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, is_profile_completed")
       .eq("id", userId)
       .single();
 
@@ -44,7 +49,7 @@ export default function LoginPage() {
     // retry once after a short pause before giving up.
     if (!profile) {
       await new Promise((r) => setTimeout(r, 600));
-      const retry = await supabase.from("profiles").select("role").eq("id", userId).single();
+      const retry = await supabase.from("profiles").select("role, is_profile_completed").eq("id", userId).single();
       profile = retry.data;
       profileError = retry.error;
     }
@@ -55,6 +60,11 @@ export default function LoginPage() {
           ? `Could not load your profile: ${profileError.message}`
           : "Your account is missing a profile row. Please contact support or check the Supabase 'profiles' table."
       );
+      return;
+    }
+
+    if (profile.is_profile_completed === false && ONBOARDING_REDIRECT[profile.role]) {
+      router.push(ONBOARDING_REDIRECT[profile.role]);
       return;
     }
 

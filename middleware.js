@@ -12,7 +12,7 @@ export async function middleware(req) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const protectedPrefixes = ["/admin", "/merchant", "/driver"];
+  const protectedPrefixes = ["/admin", "/merchant", "/driver", "/onboarding"];
   const isProtected = protectedPrefixes.some((p) => req.nextUrl.pathname.startsWith(p));
 
   if (isProtected && !session) {
@@ -24,5 +24,5 @@ export async function middleware(req) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/merchant/:path*", "/driver/:path*"],
+  matcher: ["/admin/:path*", "/merchant/:path*", "/driver/:path*", "/onboarding/:path*"],
 };

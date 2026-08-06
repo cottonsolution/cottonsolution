@@ -19,6 +19,7 @@ create table if not exists public.profiles (
   business_city       text,                 -- Business City / Location
   ntn_number          text,                 -- Business / NTN Number
   warehouse_address   text,                 -- Address / Warehouse Location
+  is_profile_completed boolean not null default false,  -- gates dashboard access until onboarding wizard is done
   created_at          timestamptz default now()
 );
 
@@ -146,11 +147,20 @@ create table if not exists public.vehicles (
   cnic_no             text not null,
   cnic_expiry         date not null,
   cnic_image_url      text,             -- Supabase Storage path (bucket: "driver-documents")
+  cnic_front_image_url text,
+  cnic_back_image_url  text,
+  father_name         text,
+  date_of_birth       date,
+  cnic_issue_date     date,
+  present_address     text,
+  permanent_address   text,
+  license_holder_name text,
   license_no          text not null,
   license_expiry      date not null,
   license_image_url   text,
-  permit_no           text not null,
-  permit_expiry       date not null,
+  truck_model         text,             -- e.g. Hino, Isuzu, JAC — manufacturer/model, distinct from vehicle_type
+  permit_no           text,             -- optional: not collected at onboarding, added later if needed
+  permit_expiry       date,
   permit_image_url    text,
   status              text default 'active' check (status in ('active', 'suspended')),
   -- Driver Portal: on-duty mode + live GPS position (see Admin/Driver docs)
@@ -169,6 +179,7 @@ create or replace view public.vehicle_verification_view as
 select
   vehicle_no,
   vehicle_type,
+  truck_model,
   mobile_no,
   driver_name,
   cnic_no,
@@ -183,7 +194,8 @@ select
        else 'Valid' end as license_status,
   permit_no,
   permit_expiry,
-  case when permit_expiry < current_date then 'Expired'
+  case when permit_expiry is null then 'Not Provided'
+       when permit_expiry < current_date then 'Expired'
        when permit_expiry < current_date + interval '30 days' then 'Expiring Soon'
        else 'Valid' end as permit_status,
   status

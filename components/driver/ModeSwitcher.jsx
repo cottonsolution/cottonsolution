@@ -1,12 +1,12 @@
 "use client";
 
-import { TruckIcon, MoonIcon } from "@/components/Icons";
+import { TruckIcon, MoonIcon, RadarIcon } from "@/components/Icons";
 
 export const MODES = [
   {
-    key: "searching",
+    key: "working",
     label: "Work Mode",
-    sublabel: "Available for loads",
+    sublabel: "On a delivery",
     icon: TruckIcon,
     activeClasses: "bg-green-500 text-white",
   },
@@ -17,30 +17,26 @@ export const MODES = [
     icon: MoonIcon,
     activeClasses: "bg-brand-orangeDark text-white",
   },
+  {
+    key: "searching",
+    label: "Find Loads",
+    sublabel: "Searching nearby",
+    icon: RadarIcon,
+    activeClasses: "bg-blue-600 text-white",
+  },
 ];
 
 /**
- * Big-tap-target, colour-coded 2-way switch — deliberately not a small
+ * Big-tap-target, colour-coded 3-way switch — deliberately not a small
  * dropdown, since the driver audience may not read English/Urdu labels
- * confidently. Colour + icon alone should be enough to tell the modes
- * apart: green truck = Work Mode (available, searching for loads, GPS on),
- * orange moon = Rest Mode (offline).
- *
- * A third internal state, "working" (actively on a delivery), still exists
- * and still drives live GPS + the trip tracker — it's set automatically the
- * moment a load is accepted (see acceptLoad / onAccepted in the dashboard),
- * so it never needs its own button here.
+ * confidently. Colour + icon alone should be enough to tell the modes apart:
+ * green truck = working, orange moon = resting, blue radar = searching.
  */
 export default function ModeSwitcher({ mode, onChange, disabled }) {
-  // While on a delivery, show Work Mode as the active state (a driver who's
-  // "working" is obviously not resting) — tapping either button here simply
-  // sets the driver back to available-or-offline once the trip is done.
-  const effectiveMode = mode === "working" ? "searching" : mode;
-
   return (
-    <div className="grid grid-cols-2 gap-2 bg-white rounded-2xl shadow-card p-2">
+    <div className="grid grid-cols-3 gap-2 bg-white rounded-2xl shadow-card p-2">
       {MODES.map((m) => {
-        const active = effectiveMode === m.key;
+        const active = mode === m.key;
         return (
           <button
             key={m.key}

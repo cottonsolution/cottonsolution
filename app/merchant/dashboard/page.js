@@ -40,9 +40,8 @@ import {
   GavelIcon,
   RefreshIcon,
 } from "@/components/Icons";
-import NotificationBell from "@/components/NotificationBell";
+import ChatHub from "@/components/chat/ChatHub";
 import LoadChatButton from "@/components/chat/LoadChatButton";
-import ChatModal from "@/components/chat/ChatModal";
 import LoadAcceptedAlert from "@/components/merchant/LoadAcceptedAlert";
 import LoadBidsPanel from "@/components/merchant/LoadBidsPanel";
 import CallButton from "@/components/CallButton";
@@ -58,45 +57,31 @@ const MiniMapPreview = dynamic(() => import("@/components/MiniMapPreview"), { ss
 
 const COMMODITY_ICON = { Cotton: CottonIcon, Wheat: WheatIcon, Rapeseed: WheatIcon, Maize: WheatIcon, Rice: WheatIcon, Sugarcane: WheatIcon, Other: TruckIcon };
 
-// The merchant's full-screen grid menu — order, emoji, Urdu label, and live
-// count keys exactly as agreed. `emoji` renders as the OS's native
-// "semi-realistic 3D" emoji (Apple/Android/Windows all render these the same
-// visual style), which is what the reference mockup used, so no custom icon
-// assets needed.
+// Each tab gets its own gradient tile — same "semi-realistic" sidebar
+// pattern used across Admin and Driver dashboards, so all three portals
+// feel like one consistent product.
 const TABS = [
-  { label: "Post a Load", urdu: "نیا لوڈ پوسٹ کریں", emoji: "📦", countKey: "post", tint: "bg-sky-100" },
-  { label: "Active Shipments", urdu: "جاری شپمنٹس", emoji: "🚛", countKey: "active", tint: "bg-orange-50" },
-  { label: "Bids & Offers", urdu: "بولیاں اور آفرز", emoji: "🤝", countKey: "bids", tint: "bg-orange-50" },
-  { label: "Shipment History", urdu: "شپمنٹ ہسٹری", emoji: "📋", tint: "bg-sky-100" },
-  { label: "Verify a Vehicle", urdu: "گاڑی کی تصدیق کریں", emoji: "🛡️", tint: "bg-sky-100" },
-  { label: "Billing & Payments", urdu: "بلنگ اور ادائیگیاں", emoji: "💵", tint: "bg-orange-50" },
-  { label: "Terms and Conditions", urdu: "شرائط و ضوابط", emoji: "📜", tint: "bg-orange-50" },
-  { label: "Company Profile", urdu: "کمپنی پروفائل", emoji: "🏢", tint: "bg-sky-100" },
-  { label: "Help & Support", urdu: "مدد اور سپورٹ", emoji: "🎧", tint: "bg-orange-50" },
+  { label: "Post a Load", short: "Post Load", icon: PlusIcon, from: "#fb923c", to: "#c2410c" },
+  { label: "Active Shipments", short: "Shipments", icon: ChartIcon, from: "#38bdf8", to: "#0369a1" },
+  { label: "Messages", short: "Chat", icon: ChatIcon, from: "#f472b6", to: "#be185d" },
+  { label: "Verify a Vehicle", short: "Verify", icon: ShieldCheckIcon, from: "#4ade80", to: "#15803d" },
+  { label: "My Profile", short: "Profile", icon: BuildingIcon, from: "#a78bfa", to: "#6d28d9" },
 ];
-
-// Rendered as the 10th box — first item of the grid's 4th row — instead of
-// the old separate full-width Logout button.
-const LOGOUT_BOX = { label: "Log out", urdu: "لاگ آؤٹ", emoji: "🚪", tint: "bg-orange-50", isLogout: true };
 
 export default function MerchantDashboardPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
   const [acceptedAlert, setAcceptedAlert] = useState(null); // { load, vehicle }
-  // The full grid is the merchant's home screen: open by default the moment
-  // the dashboard mounts (right after login, and again on every browser
-  // refresh, since this state re-initializes from scratch on every mount).
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  const [counts, setCounts] = useState({ post: 0, bids: 0, active: 0 });
-  // Set by the notification bell: { loadId, nonce } — ActiveShipments watches
-  // this and auto-selects that vehicle + opens its chat. `nonce` changes on
-  // every click so re-tapping the same notification still re-triggers it.
-  const [jumpTarget, setJumpTarget] = useState(null);
 
   useEffect(() => {
-    if (!loading && (!user || profile?.role !== "merchant")) {
+    if (loading) return;
+    if (!user || profile?.role !== "merchant") {
       router.push("/login");
+      return;
+    }
+    if (profile.is_profile_completed === false) {
+      router.push("/onboarding/merchant");
     }
   }, [loading, user, profile, router]);
 
@@ -126,59 +111,17 @@ export default function MerchantDashboardPage() {
     return () => supabase.removeChannel(channel);
   }, [user]);
 
-  // Live counts for the "Post a Load (17)" / "Bids & Offers (21)" /
-  // "Active Shipments (36)" drawer badges — a load is counted under
-  // "Post a Load" until it gets its first bid, then moves to "Bids &
-  // Offers"; once accepted (directly or via a bid) it counts under
-  // "Active Shipments" instead. This mirrors exactly where each load's card
-  // shows up in the tabs below, it just also totals them for the badge.
-  useEffect(() => {
-    if (!user) return undefined;
-    async function refreshCounts() {
-      const { data: loadRows } = await supabase
-        .from("loads")
-        .select("id, status, trip_stage")
-        .eq("merchant_id", user.id)
-        .neq("status", "cancelled");
-      const rows = loadRows ?? [];
-      const openIds = rows.filter((l) => l.status === "open").map((l) => l.id);
-      let bidLoadIds = new Set();
-      if (openIds.length) {
-        const { data: bidRows } = await supabase.from("bids").select("load_id").in("load_id", openIds).eq("status", "pending");
-        bidLoadIds = new Set((bidRows ?? []).map((b) => b.load_id));
-      }
-      const post = openIds.filter((id) => !bidLoadIds.has(id)).length;
-      const bids = bidLoadIds.size;
-      const active = rows.filter((l) => {
-        const stage = effectiveStage(l);
-        return stage >= 1 && stage <= 4;
-      }).length;
-      setCounts({ post, bids, active });
-    }
-    refreshCounts();
-    const channel = supabase
-      .channel(`merchant-counts-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "loads", filter: `merchant_id=eq.${user.id}` }, refreshCounts)
-      .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, refreshCounts)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [user]);
-
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/login");
   }
 
-  function handleOpenLoadFromNotification(loadId) {
-    setActiveTab("Active Shipments");
-    setJumpTarget({ loadId, nonce: Date.now() });
-    setDrawerOpen(false);
-  }
+  if (loading || !user || profile?.role !== "merchant" || profile.is_profile_completed === false) return null;
 
-  if (loading || !user || profile?.role !== "merchant") return null;
+  const activeMeta = TABS.find((t) => t.label === activeTab);
 
   return (
-    <section className="app-scroll max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 pb-24 lg:pb-12">
       {acceptedAlert && (
         <LoadAcceptedAlert
           load={acceptedAlert.load}
@@ -190,123 +133,106 @@ export default function MerchantDashboardPage() {
         />
       )}
 
-      <div className="sticky top-0 z-[90] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 mb-4 sm:mb-8 flex items-center justify-between gap-4 bg-white/85 backdrop-blur-md border-b border-slate-100">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <button
-            onClick={() => setDrawerOpen(true)}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 text-xl touch-manipulation select-none"
-            aria-label="Open menu"
-          >
-            ☰
-          </button>
-          <div className="min-w-0 mr-2">
-            <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-brand-navy leading-tight truncate">{activeTab}</h1>
-            <p className="text-slate-500 text-sm hidden sm:block truncate">Smart Goods Transport Company — Merchant Dashboard</p>
+      <div className="flex items-center justify-between gap-3 mb-4 sm:mb-8">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="icon-tile w-10 h-10 sm:w-12 sm:h-12 shrink-0" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
+            <TruckIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-brand-navy leading-tight truncate">Merchant Dashboard</h1>
+            <p className="text-slate-500 text-sm hidden sm:block">Post loads, track shipments, and verify vehicles before dispatch.</p>
           </div>
         </div>
 
-        <div className="shrink-0">
-          <NotificationBell userId={user.id} onOpenLoad={handleOpenLoadFromNotification} />
+        {/* Mobile: nav lives in the bottom tab bar now, so the top-right slot
+            just holds a quick logout button. */}
+        <button
+          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-red-500 shrink-0"
+          onClick={handleLogout}
+          aria-label="Logout"
+        >
+          <LogoutIcon className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex gap-6 items-start">
+        {/* DESKTOP SIDEBAR — same structure as Admin/Driver dashboards */}
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white rounded-2xl shadow-card p-3 sticky top-24 gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.label}
+              onClick={() => setActiveTab(tab.label)}
+              className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
+            >
+              <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
+                <tab.icon className="w-5 h-5 text-white" />
+              </span>
+              {tab.label}
+            </button>
+          ))}
+          <div className="border-t border-slate-100 mt-2 pt-2">
+            <button onClick={handleLogout} className="admin-sidebar-link text-red-500 hover:bg-red-50 w-full">
+              <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
+                <LogoutIcon className="w-5 h-5 text-white" />
+              </span>
+              Logout
+            </button>
+          </div>
+        </aside>
+
+        {/* CONTENT */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-4 sm:mb-6 lg:hidden">
+            <span className="icon-tile w-8 h-8 sm:w-9 sm:h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
+              <activeMeta.icon className="w-4 h-4 text-white" />
+            </span>
+            <h2 className="font-bold text-brand-navy text-sm sm:text-base whitespace-nowrap">{activeTab}</h2>
+          </div>
+
+          {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
+          {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} />}
+          {activeTab === "Messages" && <ChatHub userId={user.id} role="merchant" />}
+          {activeTab === "Verify a Vehicle" && <VehicleSearch />}
+          {activeTab === "My Profile" && <MerchantProfile userId={user.id} initialProfile={profile} />}
         </div>
       </div>
 
-      <MerchantGridMenu
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        activeTab={activeTab}
-        counts={counts}
-        onSelect={(label) => {
-          setActiveTab(label);
-          setDrawerOpen(false);
-        }}
-        onLogout={handleLogout}
-      />
-
-      <div className={drawerOpen ? "hidden" : ""}>
-        {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
-        {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} jumpTarget={jumpTarget} />}
-        {activeTab === "Bids & Offers" && <BidsOffersList merchantId={user.id} />}
-        {activeTab === "Shipment History" && <ShipmentHistory merchantId={user.id} />}
-        {activeTab === "Verify a Vehicle" && <VehicleSearch />}
-        {activeTab === "Billing & Payments" && <BillingPayments />}
-        {activeTab === "Terms and Conditions" && <TermsConditions />}
-        {activeTab === "Company Profile" && <MerchantProfile userId={user.id} initialProfile={profile} />}
-        {activeTab === "Help & Support" && <HelpSupport />}
-      </div>
-    </section>
-  );
-}
-
-/**
- * Full-screen grid navigation — replaces the old dark slide-in drawer.
- * Opens as a full-screen overlay from the hamburger button (same trigger,
- * same z-index layer), light blue/cream 3-column grid of tappable boxes
- * with a semi-realistic 3D emoji + English label + Urdu label each, matching
- * the agreed reference mockup. Logout is the 10th box (first item of row 4)
- * instead of a separate full-width button. Tapping any box closes the grid
- * and switches to that section — the header's hamburger button stays
- * visible on every section afterwards, so it doubles as the "back to menu"
- * control the same way it always reopened the old drawer.
- *
- * Stays mounted at all times (instead of unmounting when closed) purely so
- * it can fade + scale in/out smoothly like a native app sheet rather than
- * popping instantly on/off screen.
- */
-function MerchantGridMenu({ open, onClose, activeTab, counts, onSelect, onLogout }) {
-  const boxes = [...TABS, LOGOUT_BOX];
-
-  return (
-    <div
-      className={`fixed left-0 right-0 bottom-0 top-16 sm:top-20 z-[70] app-scroll overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50 transition-all duration-300 ease-out ${
-        open ? "opacity-100" : "opacity-0 pointer-events-none"
-      }`}
-      aria-hidden={!open}
-    >
-      <div className={`max-w-md mx-auto px-4 pt-6 pb-10 transition-all duration-300 ease-out ${open ? "translate-y-0 scale-100" : "translate-y-2 scale-[0.98]"}`}>
-        <div className="flex items-center justify-between mb-5">
-          <p className="text-sm font-bold tracking-wide text-brand-navy">Merchant Menu</p>
-          <button
-            onClick={onClose}
-            aria-label="Close menu"
-            className="w-9 h-9 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500 touch-manipulation select-none"
-          >
-            <CloseIcon className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {boxes.map((box) => {
-            const isActive = !box.isLogout && activeTab === box.label;
-            const count = box.countKey ? counts[box.countKey] : null;
+      {/* MOBILE BOTTOM TAB BAR — thumb-reachable primary navigation. Replaces
+          the old hamburger + off-canvas drawer, which made merchants take an
+          extra tap just to switch sections and buried Logout two levels deep. */}
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-100"
+        style={{ boxShadow: "0 -4px 16px rgba(14, 59, 46, 0.08)", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="grid grid-cols-5">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.label;
             return (
               <button
-                key={box.label}
-                onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
-                className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
-                  isActive ? "ring-2 ring-brand-orange" : ""
-                } ${box.isLogout ? "col-start-2" : ""}`}
+                key={tab.label}
+                onClick={() => setActiveTab(tab.label)}
+                className="flex flex-col items-center justify-center gap-1 py-2 min-h-[56px]"
+                aria-current={isActive ? "page" : undefined}
               >
-                {/* Glossy top highlight — gives each box a soft glass/premium sheen */}
-                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />
-
-                {count != null && count > 0 && (
-                  <span className="absolute top-1.5 right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
-                    {count}
-                  </span>
-                )}
-                <span className="relative text-4xl leading-none drop-shadow-sm">{box.emoji}</span>
-                <span className={`relative font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
-                  {box.label}
+                <span
+                  className="icon-tile w-8 h-8 rounded-xl transition-transform"
+                  style={{
+                    "--tile-from": isActive ? tab.from : "#cbd5e1",
+                    "--tile-to": isActive ? tab.to : "#94a3b8",
+                    transform: isActive ? "translateY(-1px) scale(1.05)" : "none",
+                  }}
+                >
+                  <tab.icon className="w-4 h-4 text-white" />
                 </span>
-                <span className="relative text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
-                  {box.urdu}
+                <span className={`text-[10.5px] font-semibold leading-none ${isActive ? "text-brand-navy" : "text-slate-400"}`}>
+                  {tab.short}
                 </span>
               </button>
             );
           })}
         </div>
-      </div>
-    </div>
+      </nav>
+    </section>
   );
 }
 
@@ -684,6 +610,7 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
   const [loads, setLoads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewLoad, setViewLoad] = useState(null);
+  const [bidsLoad, setBidsLoad] = useState(null); // load whose Bid Review panel is open
   const [bidCounts, setBidCounts] = useState({}); // load_id -> pending bid count
 
   async function refresh() {
@@ -694,10 +621,11 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
       .eq("status", "open")
       .order("created_at", { ascending: false });
     const rows = data ?? [];
+    setLoads(rows);
     setLoading(false);
 
-    // A load only lives here while it has zero bids — the moment a driver
-    // bids on it, it should show up under "Bids & Offers" instead, not here.
+    // Pending-bid counts, so the "View Bids" button shows a live badge
+    // without opening the panel first.
     const loadIds = rows.map((l) => l.id);
     if (loadIds.length) {
       const { data: bidRows } = await supabase.from("bids").select("load_id, status").in("load_id", loadIds).eq("status", "pending");
@@ -706,10 +634,8 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
         counts[b.load_id] = (counts[b.load_id] || 0) + 1;
       });
       setBidCounts(counts);
-      setLoads(rows.filter((l) => !counts[l.id]));
     } else {
       setBidCounts({});
-      setLoads(rows);
     }
   }
 
@@ -720,8 +646,7 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
 
   // Realtime: any INSERT/UPDATE/DELETE on this merchant's loads re-syncs the
   // list, so a card vanishes the moment `status` flips away from "open"
-  // (i.e. a driver accepted it), or the moment a bid arrives (moves to the
-  // Bids & Offers tab instead).
+  // (i.e. a driver accepted it) — see workflow requirement in the spec.
   useEffect(() => {
     const channel = supabase
       .channel(`merchant-open-loads-${merchantId}`)
@@ -731,6 +656,8 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
         () => refresh()
       )
       .subscribe();
+    // New/updated bids on any of this merchant's loads bump the badge live
+    // (functional requirement #2 — Supabase Realtime bidding updates).
     const bidsChannel = supabase
       .channel(`merchant-bid-badges-${merchantId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, () => refresh())
@@ -754,7 +681,7 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
       {loading && <p className="text-slate-400 text-sm">Loading…</p>}
       {!loading && loads.length === 0 && (
         <p className="text-slate-400 text-sm flex items-center gap-2">
-          <ChartIcon className="w-4 h-4" /> No posted loads waiting for offers right now. Once you post one above, it&apos;ll show up here until a driver bids or accepts it.
+          <ChartIcon className="w-4 h-4" /> No active posted loads. Once you post one above, it&apos;ll show up here as a card until a driver accepts it.
         </p>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -804,119 +731,26 @@ function PostedLoadsList({ merchantId, refreshKey, onEdit }) {
                   <TrashIcon className="w-3.5 h-3.5" /> Delete
                 </button>
               </div>
-            </div>
-          );
-        })}
-      </div>
 
-      {viewLoad && <ViewLoadModal load={viewLoad} onClose={() => setViewLoad(null)} />}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// BIDS & OFFERS — every posted load that has at least one pending bid. Moves
-// out to Active Shipments the instant a bid is accepted (status leaves
-// "open"). Reuses the exact same LoadBidsPanel (accept/reject/call/chat)
-// that already worked before — only where it's surfaced from has changed.
-// ---------------------------------------------------------------------------
-function BidsOffersList({ merchantId }) {
-  const [loads, setLoads] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [bidsLoad, setBidsLoad] = useState(null);
-  const [bidCounts, setBidCounts] = useState({});
-
-  async function refresh() {
-    const { data } = await supabase
-      .from("loads")
-      .select("*")
-      .eq("merchant_id", merchantId)
-      .eq("status", "open")
-      .order("created_at", { ascending: false });
-    const rows = data ?? [];
-    setLoading(false);
-
-    const loadIds = rows.map((l) => l.id);
-    if (!loadIds.length) {
-      setLoads([]);
-      setBidCounts({});
-      return;
-    }
-    const { data: bidRows } = await supabase.from("bids").select("load_id, status").in("load_id", loadIds).eq("status", "pending");
-    const counts = {};
-    (bidRows ?? []).forEach((b) => {
-      counts[b.load_id] = (counts[b.load_id] || 0) + 1;
-    });
-    setBidCounts(counts);
-    setLoads(rows.filter((l) => counts[l.id]));
-  }
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchantId]);
-
-  useEffect(() => {
-    const loadsChannel = supabase
-      .channel(`merchant-bids-tab-loads-${merchantId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "loads", filter: `merchant_id=eq.${merchantId}` }, () => refresh())
-      .subscribe();
-    const bidsChannel = supabase
-      .channel(`merchant-bids-tab-bids-${merchantId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, () => refresh())
-      .subscribe();
-    return () => {
-      supabase.removeChannel(loadsChannel);
-      supabase.removeChannel(bidsChannel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchantId]);
-
-  return (
-    <div>
-      <h3 className="font-semibold text-brand-navy mb-3">Bids & Offers</h3>
-      {loading && <p className="text-slate-400 text-sm">Loading…</p>}
-      {!loading && loads.length === 0 && (
-        <p className="text-slate-400 text-sm flex items-center gap-2">
-          <GavelIcon className="w-4 h-4" /> No offers yet. As soon as a driver bids on one of your posted loads, it&apos;ll show up here.
-        </p>
-      )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {loads.map((l) => {
-          const CommodityIcon = COMMODITY_ICON[l.commodity] ?? CottonIcon;
-          return (
-            <div key={l.id} className="card space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
-                    <CommodityIcon className="w-5 h-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-brand-navy truncate">
-                      {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate">{l.vehicle_type_needed ?? "Any truck"}</p>
-                  </div>
-                </div>
-                <span className="badge-valid shrink-0">Open</span>
-              </div>
-
-              <p className="text-sm text-slate-500 flex items-start gap-1.5">
-                <RouteIcon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span className="truncate">{l.pickup_location} &rarr; {l.dropoff_location}</span>
-              </p>
-
+              {/* Bid Review entry point — functional requirement #3.
+                  Badge shows the live pending-bid count via Supabase
+                  Realtime, so the merchant knows to check without opening
+                  the panel first. */}
               <button
                 onClick={() => setBidsLoad(l)}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] text-xs font-bold rounded-lg bg-brand-orange text-white"
+                className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] text-xs font-bold rounded-lg ${
+                  bidCounts[l.id] ? "bg-brand-orange text-white" : "border border-slate-300 text-slate-600 active:bg-slate-50"
+                }`}
               >
-                <GavelIcon className="w-3.5 h-3.5" /> View Bids ({bidCounts[l.id]})
+                <GavelIcon className="w-3.5 h-3.5" />
+                {bidCounts[l.id] ? `View Bids (${bidCounts[l.id]} new)` : "View Bids"}
               </button>
             </div>
           );
         })}
       </div>
 
+      {viewLoad && <ViewLoadModal load={viewLoad} onClose={() => setViewLoad(null)} />}
       {bidsLoad && (
         <LoadBidsPanel
           load={bidsLoad}
@@ -934,7 +768,7 @@ function BidsOffersList({ merchantId }) {
 
 function ModalShell({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
@@ -1237,31 +1071,21 @@ function MerchantProfile({ userId, initialProfile }) {
 // Maps each shipment-status tab to the underlying `loads.status` value(s)
 // it should include. "Load On Way" also catches "delivered" so completed
 // trips don't just disappear from the merchant's view.
-// ---------------------------------------------------------------------------
-// ACTIVE SHIPMENTS — a top dropdown lists every vehicle currently carrying
-// one of this merchant's loads; selecting one shows that single shipment's
-// full journey as a vertical, one-by-one timeline (Documentation -> On the
-// Way -> Reached Destination -> Rent Received), each step's actions living
-// right where "Load Accepted" it, exactly like before — only the container
-// changed from step-tabs to a dropdown + timeline.
-// ---------------------------------------------------------------------------
-function ActiveShipments({ merchantId, jumpTarget }) {
+function ActiveShipments({ merchantId }) {
   const [loads, setLoads] = useState([]);
   const [biltyMap, setBiltyMap] = useState({});
   const [vehicleMap, setVehicleMap] = useState({});
-  const [selectedLoadId, setSelectedLoadId] = useState(null);
-  const [openChatForLoadId, setOpenChatForLoadId] = useState(null);
+  const [shipmentStage, setShipmentStage] = useState(1); // default view: loads with a driver assigned onward
 
   async function refresh() {
     const { data } = await supabase
       .from("loads")
       .select("*")
       .eq("merchant_id", merchantId)
-      .in("status", ["assigned", "in_transit"])
+      .neq("status", "cancelled")
       .order("created_at", { ascending: false });
     const loadRows = data ?? [];
     setLoads(loadRows);
-    setSelectedLoadId((prev) => (prev && loadRows.some((l) => l.id === prev) ? prev : loadRows[0]?.id ?? null));
 
     const loadIds = loadRows.map((l) => l.id);
     if (loadIds.length) {
@@ -1303,74 +1127,62 @@ function ActiveShipments({ merchantId, jumpTarget }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantId]);
 
-  // Notification bell deep-link: jump to this load's vehicle and open chat.
-  useEffect(() => {
-    if (jumpTarget?.loadId) {
-      setSelectedLoadId(jumpTarget.loadId);
-      setOpenChatForLoadId(jumpTarget.loadId);
-    }
-  }, [jumpTarget]);
-
-  const selectedLoad = loads.find((l) => l.id === selectedLoadId) ?? null;
+  const counts = TRIP_STAGES.reduce((acc, tab) => {
+    acc[tab.value] = loads.filter((l) => effectiveStage(l) === tab.value).length;
+    return acc;
+  }, {});
+  const visibleLoads = loads.filter((l) => effectiveStage(l) === shipmentStage);
 
   return (
     <div>
-      <div className="card mb-6">
-        <label className="field-label">🚛 Select Vehicle</label>
-        <select
-          value={selectedLoadId ?? ""}
-          onChange={(e) => setSelectedLoadId(e.target.value)}
-          className="field-input"
-          disabled={loads.length === 0}
-        >
-          {loads.length === 0 && <option value="">No active shipments</option>}
-          {loads.map((l) => {
-            const v = l.assigned_vehicle_id ? vehicleMap[l.assigned_vehicle_id] : null;
-            return (
-              <option key={l.id} value={l.id}>
-                {v?.vehicle_no ?? "Vehicle assigning…"} — {l.commodity} ({l.pickup_location} → {l.dropoff_location})
-              </option>
-            );
-          })}
-        </select>
+      {/* Step tabs — identical 6 steps the driver sees */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        {TRIP_STAGES.map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => setShipmentStage(tab.value)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors shrink-0 ${
+              shipmentStage === tab.value ? "bg-white shadow-card text-brand-navy" : "bg-slate-100 text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <span className="icon-tile w-7 h-7 rounded-lg" style={{ "--tile-from": "#38bdf8", "--tile-to": "#0369a1" }}>
+              <tab.icon className="w-3.5 h-3.5 text-white" />
+            </span>
+            {tab.label}
+            <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${shipmentStage === tab.value ? "bg-brand-orangeSoft text-brand-orange" : "bg-slate-200 text-slate-500"}`}>
+              {counts[tab.value] ?? 0}
+            </span>
+          </button>
+        ))}
       </div>
 
-      {loads.length === 0 && (
-        <p className="text-slate-400 text-sm flex items-center gap-2">
-          <ChartIcon className="w-4 h-4" /> No active shipments right now. Once a load is accepted, select its vehicle here to track it.
-        </p>
-      )}
-
-      {selectedLoad && (
-        <ShipmentTimeline
-          load={selectedLoad}
-          vehicle={selectedLoad.assigned_vehicle_id ? vehicleMap[selectedLoad.assigned_vehicle_id] : null}
-          bilty={biltyMap[selectedLoad.id]}
-          merchantId={merchantId}
-          onChanged={refresh}
-          autoOpenChat={openChatForLoadId === selectedLoad.id}
-          onChatOpened={() => setOpenChatForLoadId(null)}
-        />
-      )}
+      {/* Cards list */}
+      <div className="space-y-3">
+        {visibleLoads.length === 0 && (
+          <p className="text-slate-400 text-sm flex items-center gap-2">
+            <ChartIcon className="w-4 h-4" /> No loads in this stage right now.
+          </p>
+        )}
+        {visibleLoads.map((l) => (
+          <ShipmentCard
+            key={l.id}
+            load={l}
+            vehicle={l.assigned_vehicle_id ? vehicleMap[l.assigned_vehicle_id] : null}
+            bilty={biltyMap[l.id]}
+            merchantId={merchantId}
+            onChanged={refresh}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-function ShipmentTimeline({ load, vehicle, bilty, merchantId, onChanged, autoOpenChat, onChatOpened }) {
+function ShipmentCard({ load, vehicle, bilty, merchantId, onChanged }) {
   const CommodityIcon = COMMODITY_ICON[load.commodity] ?? CottonIcon;
   const stage = effectiveStage(load);
+  const meta = stageMeta(stage);
   const [showBilty, setShowBilty] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-
-  useEffect(() => {
-    if (autoOpenChat) {
-      setChatOpen(true);
-      onChatOpened?.();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenChat]);
-
-  const steps = TRIP_STAGES.filter((s) => s.value >= 1); // vehicle already assigned here, so start from "Load Accepted"
 
   return (
     <div className="card space-y-4">
@@ -1390,7 +1202,7 @@ function ShipmentTimeline({ load, vehicle, bilty, merchantId, onChanged, autoOpe
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="badge-valid">
-            Step {stage}/{MAX_STAGE} — {stageMeta(stage).label}
+            Step {stage}/{MAX_STAGE} — {meta.label}
           </span>
           {vehicle && (
             <>
@@ -1399,18 +1211,13 @@ function ShipmentTimeline({ load, vehicle, bilty, merchantId, onChanged, autoOpe
                 label=""
                 className="w-9 h-9 flex items-center justify-center rounded-full text-green-600 bg-green-500/10"
               />
-              <button
-                onClick={() => setChatOpen(true)}
-                className="w-9 h-9 flex items-center justify-center rounded-full text-brand-orange bg-brand-orange/10"
-                aria-label="Chat"
-              >
-                <ChatIcon className="w-4 h-4" />
-              </button>
+              <LoadChatButton loadId={load.id} currentUserId={merchantId} label="" counterpartLabel={`Chat with ${vehicle.driver_name || "Driver"}`} className="w-9 h-9 flex items-center justify-center rounded-full text-brand-orange bg-brand-orange/10" />
             </>
           )}
         </div>
       </div>
 
+      {/* Vehicle & driver details — shown once a truck has accepted the load */}
       {vehicle ? (
         <div className="border-t border-slate-100 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <VehicleDetail icon={TruckIcon} label="Vehicle No" value={vehicle.vehicle_no} />
@@ -1426,385 +1233,81 @@ function ShipmentTimeline({ load, vehicle, bilty, merchantId, onChanged, autoOpe
         </div>
       )}
 
-      {/* ---- Vertical, one-by-one process history: completed steps stay
-          checked off above; the current step's full controls sit right
-          below it; steps that haven't started yet stay greyed out below. ---- */}
-      <div className="border-t border-slate-100 pt-4">
-        {steps.map((s, i) => {
-          const isDone = s.value < stage;
-          const isCurrent = s.value === stage;
-          const isLast = i === steps.length - 1;
-          return (
-            <div key={s.value} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <span
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                    isDone ? "bg-green-500 text-white" : isCurrent ? "bg-brand-orange text-white" : "bg-slate-200 text-slate-400"
-                  }`}
-                >
-                  {isDone ? "✓" : s.value}
-                </span>
-                {!isLast && <span className={`w-0.5 flex-1 my-0.5 ${isDone ? "bg-green-400" : "bg-slate-200"}`} style={{ minHeight: 20 }} />}
-              </div>
-              <div className={`flex-1 min-w-0 ${isLast ? "pb-1" : "pb-5"}`}>
-                <p className={`text-sm font-semibold ${isDone ? "text-green-700" : isCurrent ? "text-brand-navy" : "text-slate-400"}`}>
-                  {s.label} {isDone && <span className="text-xs font-normal text-green-600">— Completed</span>}
+      {/* ---- Stage 2: Documentation — review weighment slip + fill/submit Bilty ---- */}
+      {stage === 2 && (
+        <div className="border-t border-slate-100 pt-4 space-y-3">
+          {!load.weighment_slip_url ? (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Waiting for the driver to upload the weighment slip...
+            </p>
+          ) : (
+            <>
+              <a href={load.weighment_slip_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
+                <EyeIcon className="w-4 h-4" /> View driver&apos;s weighment slip
+              </a>
+
+              {(!load.weighment_slip_status || load.weighment_slip_status === "pending") && (
+                <SlipReviewActions load={load} vehicle={vehicle} onDone={onChanged} />
+              )}
+
+              {load.weighment_slip_status === "resubmit_requested" && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  You asked the driver to re-upload the slip
+                  {load.weighment_slip_note ? <>: &ldquo;{load.weighment_slip_note}&rdquo;</> : "."} Waiting for the new photo...
                 </p>
+              )}
+            </>
+          )}
 
-                {isCurrent && (
-                  <div className="mt-2 space-y-3">
-                    {/* ---- Step 1: Load Accepted ---- */}
-                    {s.value === 1 && (
-                      <p className="text-xs text-slate-500">Driver has accepted this load and is preparing for documentation.</p>
-                    )}
+          {load.weighment_slip_status === "approved" && bilty && bilty.status !== "submitted" && (
+            <BiltyForm load={load} bilty={bilty} vehicle={vehicle} onSubmitted={onChanged} />
+          )}
+          {bilty?.status === "submitted" && (
+            <button onClick={() => setShowBilty(true)} className="flex items-center gap-1.5 text-sm border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-600">
+              <DocumentCheckIcon className="w-4 h-4" /> View Submitted Bilty
+            </button>
+          )}
+        </div>
+      )}
 
-                    {/* ---- Step 2: Documentation — review weighment slip + fill/submit Bilty ---- */}
-                    {s.value === 2 && (
-                      <>
-                        {!load.weighment_slip_url ? (
-                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                            Waiting for the driver to upload the weighment slip...
-                          </p>
-                        ) : (
-                          <>
-                            <a href={load.weighment_slip_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
-                              <EyeIcon className="w-4 h-4" /> View driver&apos;s weighment slip
-                            </a>
+      {/* ---- Stage 3: On the Way — live GPS tracking ---- */}
+      {stage === 3 && vehicle && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold text-brand-navy mb-2 flex items-center gap-1.5">
+            <RadarIcon className="w-3.5 h-3.5 text-blue-600" /> Live truck location
+          </p>
+          <LiveTrackingWidget load={load} vehicle={vehicle} />
+        </div>
+      )}
 
-                            {(!load.weighment_slip_status || load.weighment_slip_status === "pending") && (
-                              <SlipReviewActions load={load} vehicle={vehicle} onDone={onChanged} />
-                            )}
+      {/* ---- Stage 4: Reached Destination — review arrival photo + approve ---- */}
+      {stage === 4 && (
+        <div className="border-t border-slate-100 pt-4 space-y-3">
+          {load.delivery_proof_url && (
+            <a href={load.delivery_proof_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
+              <EyeIcon className="w-4 h-4" /> View arrival photo
+            </a>
+          )}
+          {!load.merchant_approved_at ? (
+            <ApproveDeliveryButton load={load} vehicle={vehicle} onDone={onChanged} />
+          ) : (
+            <p className="text-xs text-green-700 flex items-center gap-1.5">
+              <CheckCircleIcon className="w-3.5 h-3.5" /> Approved — waiting for the driver to close the trip.
+            </p>
+          )}
+        </div>
+      )}
 
-                            {load.weighment_slip_status === "resubmit_requested" && (
-                              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                You asked the driver to re-upload the slip
-                                {load.weighment_slip_note ? <>: &ldquo;{load.weighment_slip_note}&rdquo;</> : "."} Waiting for the new photo...
-                              </p>
-                            )}
-                          </>
-                        )}
-
-                        {load.weighment_slip_status === "approved" && bilty && bilty.status !== "submitted" && (
-                          <BiltyForm load={load} bilty={bilty} vehicle={vehicle} onSubmitted={onChanged} />
-                        )}
-                        {bilty?.status === "submitted" && (
-                          <button onClick={() => setShowBilty(true)} className="flex items-center gap-1.5 text-sm border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-600">
-                            <DocumentCheckIcon className="w-4 h-4" /> View Submitted Bilty
-                          </button>
-                        )}
-                      </>
-                    )}
-
-                    {/* ---- Step 3: On the Way — live GPS tracking ---- */}
-                    {s.value === 3 && vehicle && (
-                      <>
-                        <p className="text-xs font-semibold text-brand-navy mb-2 flex items-center gap-1.5">
-                          <RadarIcon className="w-3.5 h-3.5 text-blue-600" /> Live truck location
-                        </p>
-                        <LiveTrackingWidget load={load} vehicle={vehicle} />
-                      </>
-                    )}
-
-                    {/* ---- Step 4: Reached Destination — review arrival photo + approve ---- */}
-                    {s.value === 4 && (
-                      <>
-                        {load.delivery_proof_url && (
-                          <a href={load.delivery_proof_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-semibold text-brand-orange">
-                            <EyeIcon className="w-4 h-4" /> View arrival photo
-                          </a>
-                        )}
-                        {!load.merchant_approved_at ? (
-                          <ApproveDeliveryButton load={load} vehicle={vehicle} onDone={onChanged} />
-                        ) : (
-                          <p className="text-xs text-green-700 flex items-center gap-1.5">
-                            <CheckCircleIcon className="w-3.5 h-3.5" /> Approved — waiting for the driver to close the trip.
-                          </p>
-                        )}
-                      </>
-                    )}
-
-                    {/* ---- Step 5: Rent Received — trip complete (moves to Shipment History) ---- */}
-                    {s.value === 5 && bilty && (
-                      <button onClick={() => setShowBilty(true)} className="flex items-center gap-1.5 text-sm border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-600">
-                        <DocumentCheckIcon className="w-4 h-4" /> View Bilty
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* ---- Stage 5: Rent Received — trip complete ---- */}
+      {stage === 5 && bilty && (
+        <div className="border-t border-slate-100 pt-4">
+          <button onClick={() => setShowBilty(true)} className="flex items-center gap-1.5 text-sm border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-600">
+            <DocumentCheckIcon className="w-4 h-4" /> View Bilty
+          </button>
+        </div>
+      )}
 
       {showBilty && bilty && <BiltyModal bilty={bilty} load={load} onClose={() => setShowBilty(false)} />}
-      {chatOpen && (
-        <ChatModal
-          title={`Chat with ${vehicle?.driver_name || "Driver"}`}
-          subtitle="Messages about this shipment"
-          loadId={load.id}
-          phone={vehicle?.mobile_no}
-          currentUserId={merchantId}
-          onClose={() => setChatOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SHIPMENT HISTORY — every completed ("delivered") load for this merchant,
-// searchable by vehicle number, expandable into its full saved trip record
-// (post -> documentation -> on the way -> reached -> rent received). No new
-// data model — this simply surfaces the same loads/biltys rows that were
-// already being written throughout the trip, once it's finished.
-// ---------------------------------------------------------------------------
-function ShipmentHistory({ merchantId }) {
-  const [loads, setLoads] = useState([]);
-  const [vehicleMap, setVehicleMap] = useState({});
-  const [biltyMap, setBiltyMap] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState(null);
-
-  async function refresh() {
-    const { data } = await supabase
-      .from("loads")
-      .select("*")
-      .eq("merchant_id", merchantId)
-      .eq("status", "delivered")
-      .order("created_at", { ascending: false });
-    const rows = data ?? [];
-    setLoads(rows);
-    setLoading(false);
-
-    const loadIds = rows.map((l) => l.id);
-    if (loadIds.length) {
-      const { data: biltys } = await supabase.from("biltys").select("*").in("load_id", loadIds);
-      const bMap = {};
-      (biltys ?? []).forEach((b) => (bMap[b.load_id] = b));
-      setBiltyMap(bMap);
-    }
-    const vehicleIds = [...new Set(rows.map((l) => l.assigned_vehicle_id).filter(Boolean))];
-    if (vehicleIds.length) {
-      const { data: vehicles } = await supabase.from("vehicles").select("*").in("id", vehicleIds);
-      const vMap = {};
-      (vehicles ?? []).forEach((v) => (vMap[v.id] = v));
-      setVehicleMap(vMap);
-    }
-  }
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchantId]);
-
-  const filtered = loads.filter((l) => {
-    if (!search.trim()) return true;
-    const vehicle = l.assigned_vehicle_id ? vehicleMap[l.assigned_vehicle_id] : null;
-    return (vehicle?.vehicle_no || "").toLowerCase().includes(search.trim().toLowerCase());
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="card">
-        <label className="field-label">
-          <EyeIcon className="w-4 h-4 text-brand-orange" /> Search by Vehicle No
-        </label>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="e.g. BMC 226"
-          className="field-input"
-        />
-      </div>
-
-      {loading && <p className="text-slate-400 text-sm">Loading…</p>}
-      {!loading && filtered.length === 0 && (
-        <p className="text-slate-400 text-sm flex items-center gap-2">
-          <DocumentCheckIcon className="w-4 h-4" /> {loads.length === 0 ? "No completed shipments yet." : "No completed shipments match that vehicle number."}
-        </p>
-      )}
-
-      <div className="space-y-3">
-        {filtered.map((l) => {
-          const vehicle = l.assigned_vehicle_id ? vehicleMap[l.assigned_vehicle_id] : null;
-          const bilty = biltyMap[l.id];
-          const isOpen = expandedId === l.id;
-          const CommodityIcon = COMMODITY_ICON[l.commodity] ?? CottonIcon;
-          return (
-            <div key={l.id} className="card space-y-3">
-              <button onClick={() => setExpandedId(isOpen ? null : l.id)} className="w-full flex items-center justify-between gap-3 text-left">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="icon-badge bg-green-500/10 text-green-600 w-11 h-11 rounded-xl shrink-0">
-                    <CommodityIcon className="w-5 h-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-brand-navy truncate">
-                      {l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate">
-                      {vehicle?.vehicle_no ?? "—"} · {l.pickup_location} &rarr; {l.dropoff_location}
-                    </p>
-                  </div>
-                </div>
-                <span className="badge-valid shrink-0">Completed</span>
-              </button>
-
-              {isOpen && (
-                <div className="border-t border-slate-100 pt-3 space-y-2 text-sm">
-                  <DetailRow icon={TruckIcon} label="Vehicle" value={vehicle ? `${vehicle.vehicle_no} — ${vehicle.driver_name}` : "—"} />
-                  <DetailRow icon={PhoneIcon} label="Driver Mobile" value={vehicle?.mobile_no} />
-                  <DetailRow icon={WalletIcon} label="Freight Rate" value={l.offered_rate ? `PKR ${l.offered_rate}` : "—"} />
-                  <DetailRow icon={ClockIcon} label="Posted" value={new Date(l.created_at).toLocaleString()} />
-                  {l.merchant_approved_at && (
-                    <DetailRow icon={CheckCircleIcon} label="Delivery Approved" value={new Date(l.merchant_approved_at).toLocaleString()} />
-                  )}
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    {l.weighment_slip_url && (
-                      <a href={l.weighment_slip_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold border border-slate-300 rounded-lg px-3 py-2 text-slate-600">
-                        <EyeIcon className="w-3.5 h-3.5" /> Weighment Slip
-                      </a>
-                    )}
-                    {l.delivery_proof_url && (
-                      <a href={l.delivery_proof_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-semibold border border-slate-300 rounded-lg px-3 py-2 text-slate-600">
-                        <EyeIcon className="w-3.5 h-3.5" /> Arrival Photo
-                      </a>
-                    )}
-                    {bilty && (
-                      <BiltyHistoryButton bilty={bilty} load={l} />
-                    )}
-                    <LoadChatButton
-                      loadId={l.id}
-                      currentUserId={merchantId}
-                      label="Chat"
-                      counterpartLabel={`Chat with ${vehicle?.driver_name || "Driver"}`}
-                      phone={vehicle?.mobile_no}
-                      className="flex items-center gap-1.5 text-xs font-semibold border border-slate-300 rounded-lg px-3 py-2 text-slate-600"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function BiltyHistoryButton({ bilty, load }) {
-  const [show, setShow] = useState(false);
-  return (
-    <>
-      <button onClick={() => setShow(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-slate-300 rounded-lg px-3 py-2 text-slate-600">
-        <DocumentCheckIcon className="w-3.5 h-3.5" /> View Bilty
-      </button>
-      {show && <BiltyModal bilty={bilty} load={load} onClose={() => setShow(false)} />}
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// BILLING & PAYMENTS — placeholder, bilingual notice (Urdu + English) that
-// the service is currently free for merchants.
-// ---------------------------------------------------------------------------
-function BillingPayments() {
-  return (
-    <div className="card max-w-xl space-y-5 text-center py-10">
-      <span className="icon-badge bg-green-500/10 text-green-600 w-14 h-14 rounded-2xl mx-auto">
-        <WalletIcon className="w-7 h-7" />
-      </span>
-      <div>
-        <p className="text-lg font-bold text-brand-navy" dir="rtl" lang="ur">
-          یہ سروس فی الحال تمام مرچنٹس کے لیے مکمل طور پر مفت ہے۔
-        </p>
-        <p className="text-sm text-slate-500 mt-1" dir="rtl" lang="ur">
-          کوئی فیس یا کمیشن نہیں لیا جاتا — جیسے ہی بلنگ شروع ہوگی، آپ کو پیشگی اطلاع دی جائے گی۔
-        </p>
-      </div>
-      <div className="border-t border-slate-100 pt-5">
-        <p className="text-base font-semibold text-brand-navy">
-          This service is currently completely free for all merchants.
-        </p>
-        <p className="text-sm text-slate-500 mt-1">
-          No fees or commission are charged at this time — you&apos;ll be notified in advance before any billing begins.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// TERMS AND CONDITIONS — placeholder. Content will be managed from the
-// Admin Panel in a future update.
-// ---------------------------------------------------------------------------
-function TermsConditions() {
-  return (
-    <div className="card max-w-xl text-center py-14 space-y-3">
-      <span className="icon-badge bg-slate-100 text-slate-400 w-14 h-14 rounded-2xl mx-auto">
-        <DocumentCheckIcon className="w-7 h-7" />
-      </span>
-      <p className="font-semibold text-brand-navy">Terms & Conditions</p>
-      <p className="text-sm text-slate-400 max-w-sm mx-auto">
-        This page is coming soon. Terms & Conditions will be set and published here from the Admin Panel.
-      </p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// HELP & SUPPORT — same contact details already managed in Admin > Contact
-// and shown on the public Contact Us page, surfaced here for merchants too.
-// ---------------------------------------------------------------------------
-function HelpSupport() {
-  const [contact, setContact] = useState(null);
-
-  useEffect(() => {
-    supabase.from("contact_info").select("*").eq("id", 1).maybeSingle().then(({ data }) => setContact(data));
-  }, []);
-
-  function whatsappLink(number) {
-    const digits = (number || "").replace(/[^0-9]/g, "");
-    return digits ? `https://wa.me/${digits}` : null;
-  }
-
-  const points = contact
-    ? [
-        { label: "Office Address", value: contact.address, icon: MapPinIcon },
-        { label: "Phone", value: contact.phone, href: contact.phone ? `tel:${contact.phone.replace(/\s+/g, "")}` : null, icon: PhoneIcon },
-        { label: "WhatsApp Support", value: contact.whatsapp_number, href: whatsappLink(contact.whatsapp_number), icon: PhoneIcon },
-        { label: "Email", value: contact.email, href: contact.email ? `mailto:${contact.email}` : null, icon: ChatIcon },
-      ].filter((p) => p.value)
-    : [];
-
-  return (
-    <div className="space-y-4 max-w-xl">
-      <div className="card">
-        <h3 className="font-semibold text-brand-navy mb-1">Need help?</h3>
-        <p className="text-sm text-slate-500">Reach our support team directly — same contact details as the website.</p>
-      </div>
-      {!contact && <p className="text-slate-400 text-sm">Loading…</p>}
-      {points.map((p) => {
-        const content = (
-          <div className="card flex items-center gap-4">
-            <span className="icon-badge bg-brand-orange/10 text-brand-orange w-12 h-12 rounded-xl shrink-0">
-              <p.icon className="w-5 h-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs text-slate-400 uppercase tracking-wide">{p.label}</p>
-              <p className="font-semibold text-brand-navy truncate">{p.value}</p>
-            </div>
-          </div>
-        );
-        return p.href ? (
-          <a key={p.label} href={p.href} target={p.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
-            {content}
-          </a>
-        ) : (
-          <div key={p.label}>{content}</div>
-        );
-      })}
     </div>
   );
 }

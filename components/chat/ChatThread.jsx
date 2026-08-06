@@ -104,22 +104,6 @@ export default function ChatThread({ loadId, otherUserId, otherUserName, current
         url: "/",
         tag: "sgtc-chat",
       });
-    } else if (loadId) {
-      // Per-load chat has no single "otherUserId" prop — look up the load's
-      // merchant + assigned driver and notify whichever one isn't us. This
-      // only adds an in-app notification-bell entry; it doesn't touch the
-      // existing push-notification behavior above.
-      const { data: load } = await supabase.from("loads").select("merchant_id, assigned_vehicle_id").eq("id", loadId).maybeSingle();
-      if (load) {
-        let counterpartId = load.merchant_id === currentUserId ? null : load.merchant_id;
-        if (!counterpartId && load.assigned_vehicle_id) {
-          const { data: vehicle } = await supabase.from("vehicles").select("driver_id").eq("id", load.assigned_vehicle_id).maybeSingle();
-          if (vehicle && vehicle.driver_id !== currentUserId) counterpartId = vehicle.driver_id;
-        }
-        if (counterpartId) {
-          supabase.from("notifications").insert({ user_id: counterpartId, load_id: loadId, title: "New message", body: trimmed, url: "/" }).then(() => {});
-        }
-      }
     }
   }
 

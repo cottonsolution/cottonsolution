@@ -61,7 +61,7 @@ export default function Navbar() {
   // redundant (two stacked headers) and pushed the dashboard content down.
   // This check must come AFTER the hooks above (Rules of Hooks: hooks must
   // run unconditionally on every render, in the same order).
-  const isDashboardRoute = /^\/(admin|merchant|driver)(\/|$)/.test(pathname);
+  const isDashboardRoute = /^\/(admin|merchant|driver|onboarding)(\/|$)/.test(pathname);
   if (isDashboardRoute) return null;
 
   return (

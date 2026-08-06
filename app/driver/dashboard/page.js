@@ -46,10 +46,11 @@ const SEARCH_RADIUS_KM = 60;
 const TABS = [
   { label: "Find a Load", urdu: "لوڈ تلاش کریں", emoji: "🗺️", tint: "bg-sky-100" },
   { label: "Available Loads", urdu: "دستیاب لوڈز", emoji: "📋", tint: "bg-orange-50" },
-  { label: "My Trips", urdu: "میری ٹرپس", emoji: "🚚", tint: "bg-orange-50" },
-  { label: "My Truck", urdu: "میری گاڑی", emoji: "🪪", tint: "bg-sky-100" },
-  { label: "Billing & Payments", urdu: "بلنگ اور ادائیگیاں", emoji: "💵", tint: "bg-orange-50" },
-  { label: "Help & Support", urdu: "مدد اور سپورٹ", emoji: "🎧", tint: "bg-sky-100" },
+  { label: "Active Trip", urdu: "فعال ٹرپ", emoji: "🚚", tint: "bg-orange-50" },
+  { label: "Trip History", urdu: "ٹرپ ہسٹری", emoji: "🗂️", tint: "bg-sky-100" },
+  { label: "My Truck", urdu: "میری گاڑی", emoji: "🪪", tint: "bg-orange-50" },
+  { label: "Billing & Payments", urdu: "بلنگ اور ادائیگیاں", emoji: "💵", tint: "bg-sky-100" },
+  { label: "Help & Support", urdu: "مدد اور سپورٹ", emoji: "🎧", tint: "bg-orange-50" },
 ];
 
 const LOGOUT_BOX = { label: "Log out", urdu: "لاگ آؤٹ", emoji: "🚪", tint: "bg-orange-50", isLogout: true };
@@ -62,7 +63,7 @@ export default function DriverDashboardPage() {
   // moment the dashboard mounts (right after login, and again on every
   // refresh), matching the Merchant Dashboard.
   const [drawerOpen, setDrawerOpen] = useState(true);
-  // Set by the notification bell: { loadId, nonce } — MyTrips watches this
+  // Set by the notification bell: { loadId, nonce } — ActiveTrip watches this
   // and auto-opens that load's tracker + chat. `nonce` changes on every
   // click so re-tapping the same notification still re-triggers it.
   const [jumpTarget, setJumpTarget] = useState(null);
@@ -226,7 +227,7 @@ export default function DriverDashboardPage() {
   }
 
   function handleOpenLoadFromNotification(loadId) {
-    setActiveTab("My Trips");
+    setActiveTab("Active Trip");
     setDrawerOpen(false);
     setJumpTarget({ loadId, nonce: Date.now() });
   }
@@ -270,47 +271,54 @@ export default function DriverDashboardPage() {
         onLogout={handleLogout}
       />
 
-      {!myVehicle && (
-        <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
-          <ShieldCheckIcon className="w-4 h-4 shrink-0" />
-          You haven&apos;t registered a vehicle yet.{" "}
-          <a href="/register" className="font-semibold underline">Register now</a> to switch modes and receive loads.
-        </p>
-      )}
+      {/* Hidden (display:none, not just covered) while the grid menu is open —
+          this is what actually stops the Leaflet map from ever bleeding
+          through on top of the grid, since display:none can't be beaten by
+          any z-index/stacking edge case the way opacity/covering can. */}
+      <div className={drawerOpen ? "hidden" : ""}>
+        {!myVehicle && (
+          <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
+            <ShieldCheckIcon className="w-4 h-4 shrink-0" />
+            You haven&apos;t registered a vehicle yet.{" "}
+            <a href="/register" className="font-semibold underline">Register now</a> to switch modes and receive loads.
+          </p>
+        )}
 
-      {/* MODE SWITCHER — pinned above everything, always visible regardless of tab */}
-      <div className="mb-6">
-        <ModeSwitcher mode={mode} onChange={handleModeChange} disabled={!myVehicle || modeSaving} />
+        {/* MODE SWITCHER — pinned above everything, always visible regardless of tab */}
+        <div className="mb-6">
+          <ModeSwitcher mode={mode} onChange={handleModeChange} disabled={!myVehicle || modeSaving} />
+        </div>
+
+        {activeTab === "Find a Load" && (
+          <DashboardHome
+            mode={mode}
+            myVehicle={myVehicle}
+            workLoads={workLoads}
+            driverId={user.id}
+            onChanged={refreshWorkLoads}
+            position={position}
+            locationError={locationError}
+            nearbyLoads={nearbyLoads}
+            onAccept={acceptLoad}
+          />
+        )}
+        {activeTab === "Available Loads" && (
+          <AvailableLoads
+            driverId={user.id}
+            vehicle={myVehicle}
+            onAccepted={async () => {
+              await refreshWorkLoads();
+              handleModeChange("working");
+              setActiveTab("Find a Load");
+            }}
+          />
+        )}
+        {activeTab === "Active Trip" && <ActiveTrip vehicle={myVehicle} driverId={user.id} jumpTarget={jumpTarget} />}
+        {activeTab === "Trip History" && <TripHistory vehicle={myVehicle} driverId={user.id} />}
+        {activeTab === "My Truck" && <TruckProfile vehicle={myVehicle} onUpdated={refreshVehicle} />}
+        {activeTab === "Billing & Payments" && <BillingPayments />}
+        {activeTab === "Help & Support" && <HelpSupport />}
       </div>
-
-      {activeTab === "Find a Load" && (
-        <DashboardHome
-          mode={mode}
-          myVehicle={myVehicle}
-          workLoads={workLoads}
-          driverId={user.id}
-          onChanged={refreshWorkLoads}
-          position={position}
-          locationError={locationError}
-          nearbyLoads={nearbyLoads}
-          onAccept={acceptLoad}
-        />
-      )}
-      {activeTab === "Available Loads" && (
-        <AvailableLoads
-          driverId={user.id}
-          vehicle={myVehicle}
-          onAccepted={async () => {
-            await refreshWorkLoads();
-            handleModeChange("working");
-            setActiveTab("Find a Load");
-          }}
-        />
-      )}
-      {activeTab === "My Trips" && <MyTrips vehicle={myVehicle} driverId={user.id} jumpTarget={jumpTarget} />}
-      {activeTab === "My Truck" && <TruckProfile vehicle={myVehicle} onUpdated={refreshVehicle} />}
-      {activeTab === "Billing & Payments" && <BillingPayments />}
-      {activeTab === "Help & Support" && <HelpSupport />}
     </section>
   );
 }
@@ -793,7 +801,7 @@ function VehicleDetail({ icon: Icon, label, value }) {
   );
 }
 
-function MyTrips({ vehicle, driverId, jumpTarget }) {
+function ActiveTrip({ vehicle, driverId, jumpTarget }) {
   const [loads, setLoads] = useState([]);
   const [openLoad, setOpenLoad] = useState(null);
   const [autoOpenChatId, setAutoOpenChatId] = useState(null);
@@ -804,6 +812,7 @@ function MyTrips({ vehicle, driverId, jumpTarget }) {
       .from("loads")
       .select("*")
       .eq("assigned_vehicle_id", vehicle.id)
+      .neq("status", "delivered")
       .order("created_at", { ascending: false });
     setLoads(data ?? []);
   }
@@ -812,7 +821,7 @@ function MyTrips({ vehicle, driverId, jumpTarget }) {
   useEffect(() => {
     if (!vehicle) return undefined;
     const channel = supabase
-      .channel(`my-trips-${vehicle.id}`)
+      .channel(`active-trip-${vehicle.id}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "loads", filter: `assigned_vehicle_id=eq.${vehicle.id}` },
@@ -837,7 +846,7 @@ function MyTrips({ vehicle, driverId, jumpTarget }) {
     <div className="space-y-3">
       {(!vehicle || loads.length === 0) && (
         <p className="text-slate-400 text-sm flex items-center gap-2">
-          <RouteIcon className="w-4 h-4" /> No active trips yet.
+          <RouteIcon className="w-4 h-4" /> No active trips right now — accepted loads will show up here.
         </p>
       )}
       {loads.map((l) => {
@@ -875,6 +884,68 @@ function MyTrips({ vehicle, driverId, jumpTarget }) {
           onClose={() => setOpenLoad(null)}
           autoOpenChat={autoOpenChatId === openLoad.id}
           onChatOpened={() => setAutoOpenChatId(null)}
+          onChanged={async (fresh) => {
+            setOpenLoad(fresh);
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Completed (delivered) trips for the driver's truck — separated from ActiveTrip so finished work doesn't clutter the in-progress list. */
+function TripHistory({ vehicle, driverId }) {
+  const [loads, setLoads] = useState([]);
+  const [openLoad, setOpenLoad] = useState(null);
+
+  async function refresh() {
+    if (!vehicle) return;
+    const { data } = await supabase
+      .from("loads")
+      .select("*")
+      .eq("assigned_vehicle_id", vehicle.id)
+      .eq("status", "delivered")
+      .order("created_at", { ascending: false });
+    setLoads(data ?? []);
+  }
+  useEffect(() => { refresh(); }, [vehicle]);
+
+  return (
+    <div className="space-y-3">
+      {(!vehicle || loads.length === 0) && (
+        <p className="text-slate-400 text-sm flex items-center gap-2">
+          <ClockIcon className="w-4 h-4" /> No completed trips yet — finished deliveries will show up here.
+        </p>
+      )}
+      {loads.map((l) => (
+        <button
+          key={l.id}
+          onClick={() => setOpenLoad(l)}
+          className="w-full text-left card flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:ring-2 hover:ring-brand-orange/40 transition-shadow"
+        >
+          <div className="flex items-center gap-3">
+            <span className="icon-badge bg-green-500/10 text-green-600 w-11 h-11 rounded-xl">
+              <CheckCircleIcon className="w-5 h-5" />
+            </span>
+            <div>
+              <p className="font-semibold text-brand-navy">{l.commodity} — {l.quantity_value ?? l.quantity_munds} {l.quantity_unit ?? "Munds"}</p>
+              <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                <RouteIcon className="w-3.5 h-3.5" /> {l.pickup_location} &rarr; {l.dropoff_location}
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 badge-valid shrink-0 bg-green-50 text-green-700">
+            <CheckCircleIcon className="w-3.5 h-3.5" /> Completed — {new Date(l.created_at).toLocaleDateString()}
+          </span>
+        </button>
+      ))}
+
+      {openLoad && (
+        <TripTrackerModal
+          load={openLoad}
+          driverId={driverId}
+          onClose={() => setOpenLoad(null)}
           onChanged={async (fresh) => {
             setOpenLoad(fresh);
             await refresh();

@@ -221,7 +221,7 @@ export default function MerchantDashboardPage() {
         onLogout={handleLogout}
       />
 
-      <div>
+      <div className={drawerOpen ? "hidden" : ""}>
         {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
         {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} jumpTarget={jumpTarget} />}
         {activeTab === "Bids & Offers" && <BidsOffersList merchantId={user.id} />}

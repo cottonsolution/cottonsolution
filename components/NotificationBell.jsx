@@ -81,7 +81,7 @@ export default function NotificationBell({ userId, onOpenLoad }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white rounded-2xl shadow-xl border border-slate-100 z-[95] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <p className="font-bold text-brand-navy text-sm">Notifications</p>
             <button onClick={() => setOpen(false)} className="w-7 h-7 flex items-center justify-center text-slate-400" aria-label="Close">

@@ -174,7 +174,7 @@ export default function MerchantDashboardPage() {
   if (loading || !user || profile?.role !== "merchant") return null;
 
   return (
-    <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
+    <section className="app-scroll max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
       {acceptedAlert && (
         <LoadAcceptedAlert
           load={acceptedAlert.load}
@@ -186,22 +186,24 @@ export default function MerchantDashboardPage() {
         />
       )}
 
-      <div className="relative z-[90] flex items-center justify-between gap-3 mb-4 sm:mb-8">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="sticky top-0 z-[90] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 mb-4 sm:mb-8 flex items-center justify-between gap-4 bg-white/85 backdrop-blur-md border-b border-slate-100">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 text-xl"
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 text-xl touch-manipulation select-none"
             aria-label="Open menu"
           >
             ☰
           </button>
-          <div className="min-w-0">
+          <div className="min-w-0 mr-2">
             <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-brand-navy leading-tight truncate">{activeTab}</h1>
-            <p className="text-slate-500 text-sm hidden sm:block">Smart Goods Transport Company — Merchant Dashboard</p>
+            <p className="text-slate-500 text-sm hidden sm:block truncate">Smart Goods Transport Company — Merchant Dashboard</p>
           </div>
         </div>
 
-        <NotificationBell userId={user.id} onOpenLoad={handleOpenLoadFromNotification} />
+        <div className="shrink-0">
+          <NotificationBell userId={user.id} onOpenLoad={handleOpenLoadFromNotification} />
+        </div>
       </div>
 
       <MerchantGridMenu
@@ -241,20 +243,28 @@ export default function MerchantDashboardPage() {
  * and switches to that section — the header's hamburger button stays
  * visible on every section afterwards, so it doubles as the "back to menu"
  * control the same way it always reopened the old drawer.
+ *
+ * Stays mounted at all times (instead of unmounting when closed) purely so
+ * it can fade + scale in/out smoothly like a native app sheet rather than
+ * popping instantly on/off screen.
  */
 function MerchantGridMenu({ open, onClose, activeTab, counts, onSelect, onLogout }) {
-  if (!open) return null;
   const boxes = [...TABS, LOGOUT_BOX];
 
   return (
-    <div className="fixed inset-0 z-[70] overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50">
-      <div className="max-w-md mx-auto px-4 pt-6 pb-10">
+    <div
+      className={`fixed inset-0 z-[70] app-scroll overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50 transition-all duration-300 ease-out ${
+        open ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+      aria-hidden={!open}
+    >
+      <div className={`max-w-md mx-auto px-4 pt-6 pb-10 transition-all duration-300 ease-out ${open ? "translate-y-0 scale-100" : "translate-y-2 scale-[0.98]"}`}>
         <div className="flex items-center justify-between mb-5">
           <p className="text-sm font-bold tracking-wide text-brand-navy">Merchant Menu</p>
           <button
             onClick={onClose}
             aria-label="Close menu"
-            className="w-9 h-9 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500"
+            className="w-9 h-9 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500 touch-manipulation select-none"
           >
             <CloseIcon className="w-4 h-4" />
           </button>
@@ -268,20 +278,23 @@ function MerchantGridMenu({ open, onClose, activeTab, counts, onSelect, onLogout
               <button
                 key={box.label}
                 onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
-                className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center shadow-sm transition-transform active:scale-95 ${box.tint} ${
+                className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
                   isActive ? "ring-2 ring-brand-orange" : ""
                 }`}
               >
+                {/* Glossy top highlight — gives each box a soft glass/premium sheen */}
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />
+
                 {count != null && count > 0 && (
-                  <span className="absolute top-1.5 right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+                  <span className="absolute top-1.5 right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
                     {count}
                   </span>
                 )}
-                <span className="text-4xl leading-none">{box.emoji}</span>
-                <span className={`font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
+                <span className="relative text-4xl leading-none drop-shadow-sm">{box.emoji}</span>
+                <span className={`relative font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
                   {box.label}
                 </span>
-                <span className="text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
+                <span className="relative text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
                   {box.urdu}
                 </span>
               </button>

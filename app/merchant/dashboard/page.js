@@ -83,7 +83,10 @@ export default function MerchantDashboardPage() {
   const { user, profile, loading } = useUser();
   const [activeTab, setActiveTab] = useState(TABS[0].label);
   const [acceptedAlert, setAcceptedAlert] = useState(null); // { load, vehicle }
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // The full grid is the merchant's home screen: open by default the moment
+  // the dashboard mounts (right after login, and again on every browser
+  // refresh, since this state re-initializes from scratch on every mount).
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const [counts, setCounts] = useState({ post: 0, bids: 0, active: 0 });
   // Set by the notification bell: { loadId, nonce } — ActiveShipments watches
   // this and auto-selects that vehicle + opens its chat. `nonce` changes on

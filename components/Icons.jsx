@@ -363,6 +363,15 @@ export function ClockIcon({ className }) {
   );
 }
 
+export function BackIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M20 12H4" />
+      <path d="M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
 export function ArrowRightIcon({ className }) {
   return (
     <svg className={className} {...base}>

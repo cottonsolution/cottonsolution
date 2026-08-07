@@ -16,7 +16,6 @@ import {
   ShieldCheckIcon,
   WalletIcon,
   TruckCheckIcon,
-  CloseIcon,
   MapPinIcon,
   IdCardIcon,
   CheckCircleIcon,
@@ -26,6 +25,8 @@ import {
   ChatIcon,
   MoonIcon,
   RadarIcon,
+  BackIcon,
+  HomeIcon,
 } from "@/components/Icons";
 import ModeSwitcher from "@/components/driver/ModeSwitcher";
 import WorkTaskBar, { TripTrackerModal } from "@/components/driver/WorkTaskBar";
@@ -59,15 +60,35 @@ const LOGOUT_BOX = { label: "Log out", urdu: "لاگ آؤٹ", emoji: "🚪", tin
 export default function DriverDashboardClient() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
-  const [activeTab, setActiveTab] = useState(TABS[0].label);
-  // The full grid is the driver's home screen too — open by default the
-  // moment the dashboard mounts (right after login, and again on every
-  // refresh), matching the Merchant Dashboard.
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  // null = home grid. A non-null value is a section screen. No default
+  // selection on first load — the grid starts fully neutral.
+  const [activeTab, setActiveTab] = useState(null);
+  // Simple back-stack of previous screens so the top-bar's Back button can
+  // return to wherever the driver actually came from.
+  const [history, setHistory] = useState([]);
   // Set by the notification bell: { loadId, nonce } — ActiveTrip watches this
   // and auto-opens that load's tracker + chat. `nonce` changes on every
   // click so re-tapping the same notification still re-triggers it.
   const [jumpTarget, setJumpTarget] = useState(null);
+
+  /** Push the current screen onto the back-stack, then navigate forward — used by every tap on a grid box. */
+  function navigateTo(label) {
+    setHistory((h) => [...h, activeTab]);
+    setActiveTab(label);
+  }
+  /** Top-bar Back button: pop the stack. Already at home (empty stack) is a no-op. */
+  function goBack() {
+    setHistory((h) => {
+      if (h.length === 0) return h;
+      setActiveTab(h[h.length - 1]);
+      return h.slice(0, -1);
+    });
+  }
+  /** Top-bar Home button: jump straight back to the grid and clear the stack, from anywhere. */
+  function goHome() {
+    setHistory([]);
+    setActiveTab(null);
+  }
 
   const [myVehicle, setMyVehicle] = useState(null);
   const [mode, setMode] = useState("resting");
@@ -102,7 +123,7 @@ export default function DriverDashboardClient() {
 
   async function handleModeChange(nextMode) {
     if (!myVehicle) {
-      setActiveTab("Find a Load");
+      navigateTo("Find a Load");
       return;
     }
     setMode(nextMode); // optimistic — instant tap feedback matters most for this audience
@@ -218,6 +239,7 @@ export default function DriverDashboardClient() {
     setAlertLoad(null);
     await refreshWorkLoads();
     handleModeChange("working");
+    setHistory([]);
     setActiveTab("Find a Load");
     notifyMerchantLoadAccepted({ load: updated, merchantId: updated.merchant_id, vehicle: myVehicle });
   }
@@ -228,8 +250,8 @@ export default function DriverDashboardClient() {
   }
 
   function handleOpenLoadFromNotification(loadId) {
+    setHistory([]);
     setActiveTab("Active Trip");
-    setDrawerOpen(false);
     setJumpTarget({ loadId, nonce: Date.now() });
   }
 
@@ -242,43 +264,42 @@ export default function DriverDashboardClient() {
         <LoadAlertOverlay load={alertLoad} onAccept={acceptLoad} onDismiss={() => setAlertLoad(null)} />
       )}
 
-      <div className="sticky top-0 z-[90] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 mb-4 sm:mb-8 flex items-center justify-between gap-4 bg-white/85 backdrop-blur-md border-b border-slate-100">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <button
-            onClick={() => setDrawerOpen(true)}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 text-xl touch-manipulation select-none"
-            aria-label="Open menu"
-          >
-            ☰
-          </button>
-          <div className="min-w-0 mr-2">
-            <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-brand-navy leading-tight truncate">{activeTab}</h1>
-            <p className="text-slate-500 text-sm hidden sm:block truncate">Smart Goods Transport Company — Driver Dashboard</p>
-          </div>
-        </div>
+      {/* Static top bar — Back (left), title (center), Bell + Home (right). No hamburger. */}
+      <div className="sticky top-0 z-[90] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 mb-4 sm:mb-8 flex items-center justify-between gap-3 bg-white/85 backdrop-blur-md border-b border-slate-100">
+        <button
+          onClick={goBack}
+          aria-label="Back"
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 touch-manipulation select-none disabled:opacity-40"
+          disabled={history.length === 0}
+        >
+          <BackIcon className="w-5 h-5" />
+        </button>
 
-        <div className="shrink-0">
+        <h1 className="flex-1 min-w-0 text-center text-base sm:text-2xl font-bold text-brand-navy truncate px-2">
+          {activeTab ?? "Driver Menu"}
+        </h1>
+
+        <div className="flex items-center gap-2 shrink-0">
           <NotificationBell userId={user.id} onOpenLoad={handleOpenLoadFromNotification} />
+          <button
+            onClick={goHome}
+            aria-label="Home"
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy touch-manipulation select-none"
+          >
+            <HomeIcon className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
-      <DriverGridMenu
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        activeTab={activeTab}
-        onSelect={(label) => {
-          setActiveTab(label);
-          setDrawerOpen(false);
-        }}
-        onLogout={handleLogout}
-      />
+      {/* Screen stack — keying by the current screen forces a remount, which
+          re-triggers the slide-in-from-right animation on every Back / Home /
+          grid-item tap. Grid and section content are mutually exclusive now
+          (not overlay+hidden), which also structurally rules out the old
+          map-bleed-through bug — only one of them is ever in the DOM. */}
+      <div key={activeTab ?? "__home__"} className="screen-slide-in">
+        {activeTab === null && <DriverHomeGrid onSelect={navigateTo} onLogout={handleLogout} />}
 
-      {/* Hidden (display:none, not just covered) while the grid menu is open —
-          this is what actually stops the Leaflet map from ever bleeding
-          through on top of the grid, since display:none can't be beaten by
-          any z-index/stacking edge case the way opacity/covering can. */}
-      <div className={drawerOpen ? "hidden" : ""}>
-        {!myVehicle && (
+        {activeTab !== null && !myVehicle && (
           <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm mb-6 flex items-center gap-2">
             <ShieldCheckIcon className="w-4 h-4 shrink-0" />
             You haven&apos;t registered a vehicle yet.{" "}
@@ -286,10 +307,11 @@ export default function DriverDashboardClient() {
           </p>
         )}
 
-        {/* MODE SWITCHER — pinned above everything, always visible regardless of tab */}
-        <div className="mb-6">
-          <ModeSwitcher mode={mode} onChange={handleModeChange} disabled={!myVehicle || modeSaving} />
-        </div>
+        {activeTab !== null && (
+          <div className="mb-6">
+            <ModeSwitcher mode={mode} onChange={handleModeChange} disabled={!myVehicle || modeSaving} />
+          </div>
+        )}
 
         {activeTab === "Find a Load" && (
           <DashboardHome
@@ -311,6 +333,7 @@ export default function DriverDashboardClient() {
             onAccepted={async () => {
               await refreshWorkLoads();
               handleModeChange("working");
+              setHistory([]);
               setActiveTab("Find a Load");
             }}
           />
@@ -325,58 +348,31 @@ export default function DriverDashboardClient() {
   );
 }
 
-/**
- * Full-screen grid navigation — identical style/behaviour to the Merchant
- * Dashboard's grid: light blue/cream 3-column grid, semi-realistic 3D emoji
- * + English + Urdu label per box, Logout as the 10th box (row 4, centred),
- * smooth fade+scale open/close, glossy premium tiles, lift-up tap feedback.
- * Positioned to start just below the sticky header (not overlapping it).
- */
-function DriverGridMenu({ open, onClose, activeTab, onSelect, onLogout }) {
+/** The driver's home screen — neutral 3-column grid, nothing ever shown as "selected" here. Tapping a box hands off to the parent's navigateTo. */
+function DriverHomeGrid({ onSelect, onLogout }) {
   const boxes = [...TABS, LOGOUT_BOX];
 
   return (
-    <div
-      className={`fixed left-0 right-0 bottom-0 top-16 sm:top-20 z-[70] app-scroll overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50 transition-all duration-300 ease-out ${
-        open ? "opacity-100" : "opacity-0 pointer-events-none"
-      }`}
-      aria-hidden={!open}
-    >
-      <div className={`max-w-md mx-auto px-4 pt-6 pb-10 transition-all duration-300 ease-out ${open ? "translate-y-0 scale-100" : "translate-y-2 scale-[0.98]"}`}>
-        <div className="flex items-center justify-between mb-5">
-          <p className="text-sm font-bold tracking-wide text-brand-navy">Driver Menu</p>
+    <div className="max-w-md mx-auto pb-10">
+      <div className="grid grid-cols-3 gap-3">
+        {boxes.map((box) => (
           <button
-            onClick={onClose}
-            aria-label="Close menu"
-            className="w-9 h-9 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500 touch-manipulation select-none"
+            key={box.label}
+            onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
+            className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
+              box.isLogout ? "col-start-2" : ""
+            }`}
           >
-            <CloseIcon className="w-4 h-4" />
+            <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />
+            <span className="relative text-4xl leading-none drop-shadow-sm">{box.emoji}</span>
+            <span className={`relative font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
+              {box.label}
+            </span>
+            <span className="relative text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
+              {box.urdu}
+            </span>
           </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {boxes.map((box) => {
-            const isActive = !box.isLogout && activeTab === box.label;
-            return (
-              <button
-                key={box.label}
-                onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
-                className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
-                  isActive ? "ring-2 ring-brand-orange" : ""
-                } ${box.isLogout ? "col-start-2" : ""}`}
-              >
-                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />
-                <span className="relative text-4xl leading-none drop-shadow-sm">{box.emoji}</span>
-                <span className={`relative font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
-                  {box.label}
-                </span>
-                <span className="relative text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
-                  {box.urdu}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        ))}
       </div>
     </div>
   );

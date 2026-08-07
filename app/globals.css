@@ -26,6 +26,24 @@ body {
   display: none;
 }
 
+/* Stack-navigation transition: every screen (the home grid included) slides
+   in from the right edge on mount. Keying the element by the current screen
+   forces React to remount it, which re-triggers this animation on every
+   Back/Home/item tap. */
+@keyframes slideInRight {
+  from {
+    transform: translateX(6%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.screen-slide-in {
+  animation: slideInRight 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 h1, h2, h3, h4 {
   @apply font-display;
 }

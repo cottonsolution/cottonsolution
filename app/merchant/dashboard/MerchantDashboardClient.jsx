@@ -39,6 +39,8 @@ import {
   DocumentCheckIcon,
   GavelIcon,
   RefreshIcon,
+  BackIcon,
+  HomeIcon,
 } from "@/components/Icons";
 import NotificationBell from "@/components/NotificationBell";
 import PwaSetup from "@/components/PwaSetup";
@@ -83,17 +85,39 @@ const LOGOUT_BOX = { label: "Log out", urdu: "لاگ آؤٹ", emoji: "🚪", tin
 export default function MerchantDashboardClient() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
-  const [activeTab, setActiveTab] = useState(TABS[0].label);
+  // null = home grid. A non-null value is a section screen. No default
+  // selection on first load — the grid starts fully neutral until the
+  // merchant taps something.
+  const [activeTab, setActiveTab] = useState(null);
+  // Simple back-stack of previous screens (each entry is a screen value,
+  // i.e. null for home or a tab label) so the top-bar's Back button can
+  // return to wherever the merchant actually came from.
+  const [history, setHistory] = useState([]);
   const [acceptedAlert, setAcceptedAlert] = useState(null); // { load, vehicle }
-  // The full grid is the merchant's home screen: open by default the moment
-  // the dashboard mounts (right after login, and again on every browser
-  // refresh, since this state re-initializes from scratch on every mount).
-  const [drawerOpen, setDrawerOpen] = useState(true);
   const [counts, setCounts] = useState({ post: 0, bids: 0, active: 0 });
   // Set by the notification bell: { loadId, nonce } — ActiveShipments watches
   // this and auto-selects that vehicle + opens its chat. `nonce` changes on
   // every click so re-tapping the same notification still re-triggers it.
   const [jumpTarget, setJumpTarget] = useState(null);
+
+  /** Push the current screen onto the back-stack, then navigate forward — used by every tap on a grid box. */
+  function navigateTo(label) {
+    setHistory((h) => [...h, activeTab]);
+    setActiveTab(label);
+  }
+  /** Top-bar Back button: pop the stack. Already at home (empty stack) is a no-op. */
+  function goBack() {
+    setHistory((h) => {
+      if (h.length === 0) return h;
+      setActiveTab(h[h.length - 1]);
+      return h.slice(0, -1);
+    });
+  }
+  /** Top-bar Home button: jump straight back to the grid and clear the stack, from anywhere. */
+  function goHome() {
+    setHistory([]);
+    setActiveTab(null);
+  }
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "merchant")) {
@@ -171,9 +195,9 @@ export default function MerchantDashboardClient() {
   }
 
   function handleOpenLoadFromNotification(loadId) {
+    setHistory([]);
     setActiveTab("Active Shipments");
     setJumpTarget({ loadId, nonce: Date.now() });
-    setDrawerOpen(false);
   }
 
   if (loading || !user || profile?.role !== "merchant") return null;
@@ -187,44 +211,44 @@ export default function MerchantDashboardClient() {
           vehicle={acceptedAlert.vehicle}
           onDismiss={() => {
             setAcceptedAlert(null);
+            setHistory([]);
             setActiveTab("Active Shipments");
           }}
         />
       )}
 
-      <div className="sticky top-0 z-[90] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 mb-4 sm:mb-8 flex items-center justify-between gap-4 bg-white/85 backdrop-blur-md border-b border-slate-100">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <button
-            onClick={() => setDrawerOpen(true)}
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 text-xl touch-manipulation select-none"
-            aria-label="Open menu"
-          >
-            ☰
-          </button>
-          <div className="min-w-0 mr-2">
-            <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-brand-navy leading-tight truncate">{activeTab}</h1>
-            <p className="text-slate-500 text-sm hidden sm:block truncate">Smart Goods Transport Company — Merchant Dashboard</p>
-          </div>
-        </div>
+      {/* Static top bar — Back (left), title (center), Bell + Home (right). No hamburger. */}
+      <div className="sticky top-0 z-[90] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 mb-4 sm:mb-8 flex items-center justify-between gap-3 bg-white/85 backdrop-blur-md border-b border-slate-100">
+        <button
+          onClick={goBack}
+          aria-label="Back"
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0 touch-manipulation select-none disabled:opacity-40"
+          disabled={history.length === 0}
+        >
+          <BackIcon className="w-5 h-5" />
+        </button>
 
-        <div className="shrink-0">
+        <h1 className="flex-1 min-w-0 text-center text-base sm:text-2xl font-bold text-brand-navy truncate px-2">
+          {activeTab ?? "Merchant Menu"}
+        </h1>
+
+        <div className="flex items-center gap-2 shrink-0">
           <NotificationBell userId={user.id} onOpenLoad={handleOpenLoadFromNotification} />
+          <button
+            onClick={goHome}
+            aria-label="Home"
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy touch-manipulation select-none"
+          >
+            <HomeIcon className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
-      <MerchantGridMenu
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        activeTab={activeTab}
-        counts={counts}
-        onSelect={(label) => {
-          setActiveTab(label);
-          setDrawerOpen(false);
-        }}
-        onLogout={handleLogout}
-      />
-
-      <div className={drawerOpen ? "hidden" : ""}>
+      {/* Screen stack — keying by the current screen forces a remount, which
+          re-triggers the slide-in-from-right animation on every Back / Home /
+          grid-item tap. */}
+      <div key={activeTab ?? "__home__"} className="screen-slide-in">
+        {activeTab === null && <MerchantHomeGrid counts={counts} onSelect={navigateTo} onLogout={handleLogout} />}
         {activeTab === "Post a Load" && <PostLoad merchantId={user.id} />}
         {activeTab === "Active Shipments" && <ActiveShipments merchantId={user.id} jumpTarget={jumpTarget} />}
         {activeTab === "Bids & Offers" && <BidsOffersList merchantId={user.id} />}
@@ -240,73 +264,46 @@ export default function MerchantDashboardClient() {
 }
 
 /**
- * Full-screen grid navigation — replaces the old dark slide-in drawer.
- * Opens as a full-screen overlay from the hamburger button (same trigger,
- * same z-index layer), light blue/cream 3-column grid of tappable boxes
- * with a semi-realistic 3D emoji + English label + Urdu label each, matching
- * the agreed reference mockup. Logout is the 10th box (first item of row 4)
- * instead of a separate full-width button. Tapping any box closes the grid
- * and switches to that section — the header's hamburger button stays
- * visible on every section afterwards, so it doubles as the "back to menu"
- * control the same way it always reopened the old drawer.
- *
- * Stays mounted at all times (instead of unmounting when closed) purely so
- * it can fade + scale in/out smoothly like a native app sheet rather than
- * popping instantly on/off screen.
+ * The merchant's home screen — neutral 3-column grid, no item ever shown as
+ * "selected" here (there's nothing to be selected relative to, since this
+ * screen and the section screens are mutually exclusive now). Tapping a box
+ * hands off straight to the parent's navigateTo, which pushes the stack and
+ * triggers the slide-in transition.
  */
-function MerchantGridMenu({ open, onClose, activeTab, counts, onSelect, onLogout }) {
+function MerchantHomeGrid({ counts, onSelect, onLogout }) {
   const boxes = [...TABS, LOGOUT_BOX];
 
   return (
-    <div
-      className={`fixed left-0 right-0 bottom-0 top-16 sm:top-20 z-[70] app-scroll overflow-y-auto bg-gradient-to-b from-sky-50 via-white to-orange-50 transition-all duration-300 ease-out ${
-        open ? "opacity-100" : "opacity-0 pointer-events-none"
-      }`}
-      aria-hidden={!open}
-    >
-      <div className={`max-w-md mx-auto px-4 pt-6 pb-10 transition-all duration-300 ease-out ${open ? "translate-y-0 scale-100" : "translate-y-2 scale-[0.98]"}`}>
-        <div className="flex items-center justify-between mb-5">
-          <p className="text-sm font-bold tracking-wide text-brand-navy">Merchant Menu</p>
-          <button
-            onClick={onClose}
-            aria-label="Close menu"
-            className="w-9 h-9 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500 touch-manipulation select-none"
-          >
-            <CloseIcon className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="max-w-md mx-auto pb-10">
+      <div className="grid grid-cols-3 gap-3">
+        {boxes.map((box) => {
+          const count = box.countKey ? counts[box.countKey] : null;
+          return (
+            <button
+              key={box.label}
+              onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
+              className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
+                box.isLogout ? "col-start-2" : ""
+              }`}
+            >
+              {/* Glossy top highlight — gives each box a soft glass/premium sheen */}
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />
 
-        <div className="grid grid-cols-3 gap-3">
-          {boxes.map((box) => {
-            const isActive = !box.isLogout && activeTab === box.label;
-            const count = box.countKey ? counts[box.countKey] : null;
-            return (
-              <button
-                key={box.label}
-                onClick={() => (box.isLogout ? onLogout() : onSelect(box.label))}
-                className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl px-2 py-4 text-center overflow-hidden border border-white/70 shadow-[0_3px_10px_rgba(15,30,60,0.10)] transition-all duration-150 ease-out touch-manipulation select-none active:-translate-y-1 active:scale-[1.02] active:shadow-[0_12px_26px_rgba(15,30,60,0.20)] ${box.tint} ${
-                  isActive ? "ring-2 ring-brand-orange" : ""
-                } ${box.isLogout ? "col-start-2" : ""}`}
-              >
-                {/* Glossy top highlight — gives each box a soft glass/premium sheen */}
-                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/70 to-transparent" />
-
-                {count != null && count > 0 && (
-                  <span className="absolute top-1.5 right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
-                    {count}
-                  </span>
-                )}
-                <span className="relative text-4xl leading-none drop-shadow-sm">{box.emoji}</span>
-                <span className={`relative font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
-                  {box.label}
+              {count != null && count > 0 && (
+                <span className="absolute top-1.5 right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
+                  {count}
                 </span>
-                <span className="relative text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
-                  {box.urdu}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+              )}
+              <span className="relative text-4xl leading-none drop-shadow-sm">{box.emoji}</span>
+              <span className={`relative font-semibold leading-tight text-[13px] ${box.isLogout ? "text-red-500" : "text-brand-navy"}`}>
+                {box.label}
+              </span>
+              <span className="relative text-[11px] text-slate-500 leading-tight" dir="rtl" lang="ur">
+                {box.urdu}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

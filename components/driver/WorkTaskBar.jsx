@@ -23,6 +23,7 @@ import {
 import BiltyModal from "@/components/BiltyModal";
 import LoadChatButton from "@/components/chat/LoadChatButton";
 import CallButton from "@/components/CallButton";
+import { useLockBodyScroll } from "@/lib/useLockBodyScroll";
 
 /**
  * Persistent band at the top of the dashboard while the driver is in Work
@@ -91,6 +92,7 @@ export default function WorkTaskBar({ loads, driverId, onChanged }) {
 }
 
 export function TripTrackerModal({ load, driverId, onClose, onChanged, autoOpenChat, onChatOpened }) {
+  useLockBodyScroll(true);
   const current = effectiveStage(load);
   const [busy, setBusy] = useState(false);
   const [bilty, setBilty] = useState(null);

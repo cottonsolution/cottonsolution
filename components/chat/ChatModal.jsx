@@ -3,8 +3,10 @@
 import { CloseIcon, ChatIcon } from "@/components/Icons";
 import CallButton from "@/components/CallButton";
 import ChatThread from "./ChatThread";
+import { useLockBodyScroll } from "@/lib/useLockBodyScroll";
 
 export default function ChatModal({ title, subtitle, phone, onClose, ...threadProps }) {
+  useLockBodyScroll(true);
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseBrowserClient";
 import { CloseIcon, PrintIcon, DownloadIcon, DocumentCheckIcon } from "@/components/Icons";
+import { useLockBodyScroll } from "@/lib/useLockBodyScroll";
 
 /**
  * Read-only, printable view of a submitted Bilty, laid out like a standard
@@ -16,6 +17,7 @@ import { CloseIcon, PrintIcon, DownloadIcon, DocumentCheckIcon } from "@/compone
  * so a driver can keep an actual saved/printable copy.
  */
 export default function BiltyModal({ bilty, load, onClose }) {
+  useLockBodyScroll(true);
   const [merchant, setMerchant] = useState(null);
   const [downloading, setDownloading] = useState(false);
 

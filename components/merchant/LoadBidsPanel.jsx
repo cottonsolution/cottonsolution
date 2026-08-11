@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseBrowserClient";
 import { notifyDriverBidAccepted, notifyDriverBidRejected } from "@/lib/shipmentActions";
 import CallButton from "@/components/CallButton";
 import LoadChatButton from "@/components/chat/LoadChatButton";
+import { useLockBodyScroll } from "@/lib/useLockBodyScroll";
 import {
   CloseIcon,
   GavelIcon,
@@ -30,6 +31,7 @@ import {
  * so there's no window where two drivers could both think they won.
  */
 export default function LoadBidsPanel({ load, merchantId, onClose, onAccepted }) {
+  useLockBodyScroll(true);
   const [bids, setBids] = useState([]);
   const [drivers, setDrivers] = useState({}); // driver_id -> profile
   const [vehicles, setVehicles] = useState({}); // vehicle_id -> vehicle

@@ -45,6 +45,7 @@ import {
 import NotificationBell from "@/components/NotificationBell";
 import PwaSetup from "@/components/PwaSetup";
 import DashboardVideoDeck from "@/components/DashboardVideoDeck";
+import { useLockBodyScroll } from "@/lib/useLockBodyScroll";
 import LoadChatButton from "@/components/chat/LoadChatButton";
 import ChatModal from "@/components/chat/ChatModal";
 import LoadAcceptedAlert from "@/components/merchant/LoadAcceptedAlert";
@@ -934,6 +935,7 @@ function BidsOffersList({ merchantId }) {
 }
 
 function ModalShell({ title, onClose, children }) {
+  useLockBodyScroll(true);
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />

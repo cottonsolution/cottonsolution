@@ -68,6 +68,7 @@ create table if not exists public.hero_slides (
   media_type    text not null default 'image' check (media_type in ('image', 'video')),
   caption       text,
   sort_order    int default 0,
+  section       text not null default 'home' check (section in ('home', 'admin', 'driver', 'merchant')),
   created_at    timestamptz default now()
 );
 

@@ -33,6 +33,7 @@ import WorkTaskBar, { TripTrackerModal } from "@/components/driver/WorkTaskBar";
 import LoadAlertOverlay from "@/components/driver/LoadAlertOverlay";
 import NotificationBell from "@/components/NotificationBell";
 import PwaSetup from "@/components/PwaSetup";
+import DashboardVideoDeck from "@/components/DashboardVideoDeck";
 import { subscribeToPush } from "@/lib/pushClient";
 import { notifyMerchantLoadAccepted } from "@/lib/shipmentActions";
 
@@ -260,6 +261,7 @@ export default function DriverDashboardClient() {
   return (
     <section className="app-scroll max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
       <PwaSetup />
+      <DashboardVideoDeck section="driver" />
       {alertLoad && (
         <LoadAlertOverlay load={alertLoad} onAccept={acceptLoad} onDismiss={() => setAlertLoad(null)} />
       )}

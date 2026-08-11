@@ -29,7 +29,7 @@ async function getHomeData() {
       supabase.from("site_content").select("*").eq("id", 1).single(),
       supabase.from("services").select("*").order("sort_order"),
       supabase.from("how_it_works_steps").select("*").order("sort_order"),
-      supabase.from("hero_slides").select("*").order("sort_order"),
+      supabase.from("hero_slides").select("*").eq("section", "home").order("sort_order"),
     ]);
     return { content, services: services ?? [], steps: steps ?? [], slides: slides ?? [] };
   } catch (e) {

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseBrowserClient";
 import { useUser } from "@/lib/useUser";
 import { uploadSiteMedia } from "@/lib/uploadDocument";
 import PwaSetup from "@/components/PwaSetup";
+import DashboardVideoDeck from "@/components/DashboardVideoDeck";
 import {
   HomeIcon,
   GridIcon,
@@ -78,6 +79,7 @@ export default function AdminDashboardClient() {
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
       <PwaSetup />
+      <DashboardVideoDeck section="admin" />
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <span className="icon-tile w-12 h-12" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
@@ -291,7 +293,15 @@ function HomeContentManager() {
 // ---------------------------------------------------------------------------
 // Hero image/video slides manager (list + add + edit caption + delete)
 // ---------------------------------------------------------------------------
+const SLIDE_SECTIONS = [
+  { key: "home", label: "Home (public site)" },
+  { key: "admin", label: "Admin Dashboard" },
+  { key: "driver", label: "Driver Dashboard" },
+  { key: "merchant", label: "Merchant Dashboard" },
+];
+
 function HeroSlidesManager() {
+  const [section, setSection] = useState("home");
   const [slides, setSlides] = useState([]);
   const [file, setFile] = useState(null);
   const [caption, setCaption] = useState("");
@@ -300,10 +310,10 @@ function HeroSlidesManager() {
   const [editingId, setEditingId] = useState(null);
 
   async function refresh() {
-    const { data } = await supabase.from("hero_slides").select("*").order("sort_order");
+    const { data } = await supabase.from("hero_slides").select("*").eq("section", section).order("sort_order");
     setSlides(data ?? []);
   }
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); }, [section]);
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -318,6 +328,7 @@ function HeroSlidesManager() {
         media_type: mediaType,
         caption: caption.trim() || null,
         sort_order: slides.length + 1,
+        section,
       });
       if (insertError) throw insertError;
       setFile(null);
@@ -341,13 +352,40 @@ function HeroSlidesManager() {
     refresh();
   }
 
+  async function handleReorder(id, direction) {
+    const idx = slides.findIndex((s) => s.id === id);
+    const swapWith = slides[idx + direction];
+    if (!swapWith) return;
+    const a = slides[idx];
+    await Promise.all([
+      supabase.from("hero_slides").update({ sort_order: swapWith.sort_order }).eq("id", a.id),
+      supabase.from("hero_slides").update({ sort_order: a.sort_order }).eq("id", swapWith.id),
+    ]);
+    refresh();
+  }
+
   return (
     <div className="card max-w-xl space-y-5">
       <div>
-        <h3 className="font-semibold text-brand-navy">Hero Background Slides</h3>
+        <h3 className="font-semibold text-brand-navy">Video / Image Slides</h3>
         <p className="text-sm text-slate-500">
-          Add photos or short videos to rotate behind the homepage heading — looks great on both mobile and desktop.
+          Add photos or short videos that rotate at the top of each area of the app — the public homepage, or the top
+          of each dashboard right below the header.
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {SLIDE_SECTIONS.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setSection(s.key)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+              section === s.key ? "bg-brand-orange text-white border-brand-orange" : "border-slate-300 text-slate-600"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
 
       <form onSubmit={handleAdd} className="space-y-3">
@@ -368,14 +406,14 @@ function HeroSlidesManager() {
         />
         <button type="submit" disabled={!file || uploading} className="btn-orange w-full">
           <PlusIcon className="w-4 h-4" />
-          {uploading ? "Uploading..." : "Add Slide"}
+          {uploading ? "Uploading..." : `Add Slide to ${SLIDE_SECTIONS.find((s) => s.key === section).label}`}
         </button>
       </form>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
       <div className="space-y-3 pt-2 border-t border-slate-100">
-        {slides.length === 0 && <p className="text-slate-400 text-sm">No slides yet — add one above.</p>}
-        {slides.map((s) => (
+        {slides.length === 0 && <p className="text-slate-400 text-sm">No slides yet for this section — add one above.</p>}
+        {slides.map((s, i) => (
           <SlideRow
             key={s.id}
             slide={s}
@@ -384,6 +422,8 @@ function HeroSlidesManager() {
             onCancel={() => setEditingId(null)}
             onSave={(c) => handleCaptionSave(s.id, c)}
             onDelete={() => handleDelete(s.id)}
+            onMoveUp={i > 0 ? () => handleReorder(s.id, -1) : null}
+            onMoveDown={i < slides.length - 1 ? () => handleReorder(s.id, 1) : null}
           />
         ))}
       </div>
@@ -391,7 +431,7 @@ function HeroSlidesManager() {
   );
 }
 
-function SlideRow({ slide, isEditing, onEdit, onCancel, onSave, onDelete }) {
+function SlideRow({ slide, isEditing, onEdit, onCancel, onSave, onDelete, onMoveUp, onMoveDown }) {
   const [caption, setCaption] = useState(slide.caption ?? "");
   const [viewing, setViewing] = useState(false);
 
@@ -420,6 +460,12 @@ function SlideRow({ slide, isEditing, onEdit, onCancel, onSave, onDelete }) {
           </>
         ) : (
           <>
+            <button onClick={onMoveUp} disabled={!onMoveUp} className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg disabled:opacity-30" aria-label="Move up">
+              <ArrowUpIcon className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={onMoveDown} disabled={!onMoveDown} className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg disabled:opacity-30" aria-label="Move down">
+              <ArrowDownIcon className="w-3.5 h-3.5" />
+            </button>
             <button onClick={() => setViewing(true)} className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg" aria-label="View slide">
               <EyeIcon className="w-3.5 h-3.5" />
             </button>

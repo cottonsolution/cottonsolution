@@ -36,36 +36,51 @@ import {
   EditIcon,
   ArrowUpIcon,
   ArrowDownIcon,
+  ArrowLeftIcon,
   ChatIcon,
+  BuildingIcon,
+  UserIcon,
 } from "@/components/Icons";
 import ChatHub from "@/components/chat/ChatHub";
 
-// Each tab gets its own gradient (via CSS vars) so the sidebar icon tiles
-// read as distinct, "semi-realistic" colour-coded shortcuts rather than
-// same-colour line icons — easier for non-reading users to tell apart.
-const TABS = [
-  { label: "Home Content", icon: HomeIcon, from: "#38bdf8", to: "#0369a1" },
-  { label: "Our Services", icon: GridIcon, from: "#a78bfa", to: "#6d28d9" },
-  { label: "How It Works", icon: RouteIcon, from: "#fb923c", to: "#c2410c" },
-  { label: "Commodity", icon: BoxIcon, from: "#facc15", to: "#a16207" },
-  { label: "Quantity Units", icon: ScaleIcon, from: "#2dd4bf", to: "#0f766e" },
-  { label: "Truck Types", icon: TruckIcon, from: "#4ade80", to: "#15803d" },
-  { label: "Messages", icon: ChatIcon, from: "#f472b6", to: "#be185d" },
-  { label: "Contact", icon: MailIcon, from: "#f472b6", to: "#be185d" },
-  { label: "Expiry Alerts", icon: BellIcon, from: "#f87171", to: "#b91c1c" },
+// The 9 cards on the Administrator Menu grid — English title + Urdu
+// secondary label, matching the driver-app card style. Soft alternating
+// background tones (no hard sidebar) so the whole screen reads like a
+// simple menu rather than a dense admin panel.
+const MENU_CARDS = [
+  { key: "trucks", title: "Trucks/Drivers Management", urdu: "گاڑیاں اور ڈرائیورز", icon: TruckIcon, tone: "sky", showCount: true },
+  { key: "merchants", title: "Merchants Management", urdu: "مرچنٹس", icon: BuildingIcon, tone: "peach", showCount: true },
+  { key: "home_content", title: "Home Content", urdu: "ہوم مواد", icon: HomeIcon, tone: "peach" },
+  { key: "commodity", title: "Commodity", urdu: "اجناس", icon: BoxIcon, tone: "peach" },
+  { key: "quantity_units", title: "Quantity Units", urdu: "مقدار کی اکائیاں", icon: ScaleIcon, tone: "peach" },
+  { key: "truck_types", title: "Truck Types", urdu: "گاڑیوں کی اقسام", icon: TruckIcon, tone: "sky" },
+  { key: "messages", title: "Messages Inbox", urdu: "پیغامات", icon: ChatIcon, tone: "peach" },
+  { key: "expiry_alerts", title: "Expiry Alerts", urdu: "معیاد ختم ہونے کی الرٹس", icon: BellIcon, tone: "peach" },
+  { key: "logout", title: "Logout", urdu: "لاگ آؤٹ", icon: LogoutIcon, tone: "peach", danger: true },
 ];
+
+const TONE_BG = { sky: "bg-sky-50", peach: "bg-orange-50" };
 
 export default function AdminDashboardClient() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
-  const [activeTab, setActiveTab] = useState(TABS[0].label);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [section, setSection] = useState(null); // null = grid menu; otherwise a MENU_CARDS key
+  const [pendingCounts, setPendingCounts] = useState({ trucks: 0, merchants: 0 });
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== "admin")) {
       router.push("/login");
     }
   }, [loading, user, profile, router]);
+
+  async function refreshPendingCounts() {
+    const [{ count: trucksCount }, { count: merchantsCount }] = await Promise.all([
+      supabase.from("vehicles").select("id", { count: "exact", head: true }).eq("account_status", "new"),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "merchant").eq("account_status", "new"),
+    ]);
+    setPendingCounts({ trucks: trucksCount ?? 0, merchants: merchantsCount ?? 0 });
+  }
+  useEffect(() => { if (user) refreshPendingCounts(); }, [user]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -74,117 +89,270 @@ export default function AdminDashboardClient() {
 
   if (loading || !user || profile?.role !== "admin") return null;
 
-  const activeMeta = TABS.find((t) => t.label === activeTab);
+  const activeCard = MENU_CARDS.find((c) => c.key === section);
 
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+    <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
       <PwaSetup />
       <DashboardVideoDeck section="admin" />
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <span className="icon-tile w-12 h-12" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
-            <ShieldCheckIcon className="w-6 h-6 text-white" />
-          </span>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-brand-navy leading-tight">Admin Dashboard</h1>
-            <p className="text-slate-500 text-sm hidden sm:block">Manage website content and monitor compliance.</p>
-          </div>
-        </div>
 
-        {/* mobile hamburger — opens the sidebar as a slide-in drawer */}
+      {/* Top bar — back arrow (inside a section) / title / avatar+logout */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          {section ? (
+            <button
+              onClick={() => setSection(null)}
+              className="w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0"
+              aria-label="Back to menu"
+            >
+              <ArrowLeftIcon className="w-5 h-5" />
+            </button>
+          ) : (
+            <span className="icon-tile w-10 h-10" style={{ "--tile-from": "#fb923c", "--tile-to": "#c2410c" }}>
+              <ShieldCheckIcon className="w-5 h-5 text-white" />
+            </span>
+          )}
+          <h1 className="text-xl sm:text-2xl font-bold text-brand-navy">
+            {activeCard ? activeCard.title : "Administrator Menu"}
+          </h1>
+        </div>
         <button
-          className="lg:hidden w-10 h-10 rounded-xl bg-white shadow-card flex items-center justify-center text-brand-navy shrink-0"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open menu"
+          onClick={handleLogout}
+          className="w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-slate-500 shrink-0"
+          aria-label="Logout"
+          title="Logout"
         >
-          <MenuIcon className="w-5 h-5" />
+          <UserIcon className="w-5 h-5" />
         </button>
       </div>
 
-      <div className="flex gap-6 items-start">
-        {/* DESKTOP SIDEBAR — the single source of dashboard navigation */}
-        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white rounded-2xl shadow-card p-3 sticky top-24 gap-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab.label}
-              onClick={() => setActiveTab(tab.label)}
-              className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
-            >
-              <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
-                <tab.icon className="w-5 h-5 text-white" />
-              </span>
-              {tab.label}
-            </button>
-          ))}
-          <div className="border-t border-slate-100 mt-2 pt-2">
-            <button onClick={handleLogout} className="admin-sidebar-link text-red-500 hover:bg-red-50 w-full">
-              <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
-                <LogoutIcon className="w-5 h-5 text-white" />
-              </span>
-              Logout
-            </button>
-          </div>
-        </aside>
-
-        {/* MOBILE DRAWER — slides in from the left with a dimmed overlay */}
-        {drawerOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-            <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl p-4 flex flex-col gap-1 animate-[slideIn_0.25s_ease-out]">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-bold text-brand-navy">Menu</span>
-                <button onClick={() => setDrawerOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400">
-                  <CloseIcon className="w-5 h-5" />
-                </button>
-              </div>
-              {TABS.map((tab) => (
-                <button
-                  key={tab.label}
-                  onClick={() => {
-                    setActiveTab(tab.label);
-                    setDrawerOpen(false);
-                  }}
-                  className={`admin-sidebar-link ${activeTab === tab.label ? "active" : ""}`}
-                >
-                  <span className="icon-tile" style={{ "--tile-from": tab.from, "--tile-to": tab.to }}>
-                    <tab.icon className="w-5 h-5 text-white" />
-                  </span>
-                  {tab.label}
-                </button>
-              ))}
-              <div className="border-t border-slate-100 mt-2 pt-2">
-                <button onClick={handleLogout} className="admin-sidebar-link text-red-500 w-full">
-                  <span className="icon-tile" style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}>
-                    <LogoutIcon className="w-5 h-5 text-white" />
-                  </span>
-                  Logout
-                </button>
-              </div>
-            </aside>
-          </div>
-        )}
-
-        {/* CONTENT */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-6 lg:hidden overflow-x-auto pb-1">
-            <span className="icon-tile w-9 h-9" style={{ "--tile-from": activeMeta.from, "--tile-to": activeMeta.to }}>
-              <activeMeta.icon className="w-4 h-4 text-white" />
-            </span>
-            <h2 className="font-bold text-brand-navy whitespace-nowrap">{activeTab}</h2>
-          </div>
-
-          {activeTab === "Home Content" && <HomeContentManager />}
-          {activeTab === "Our Services" && <ServicesManager />}
-          {activeTab === "How It Works" && <StepsManager />}
-          {activeTab === "Commodity" && <CommodityManager />}
-          {activeTab === "Quantity Units" && <QuantityUnitsManager />}
-          {activeTab === "Truck Types" && <VehicleTypesManager />}
-          {activeTab === "Messages" && <ChatHub userId={user.id} role="admin" />}
-          {activeTab === "Contact" && <ContactManager />}
-          {activeTab === "Expiry Alerts" && <ExpiryAlerts />}
+      {!section && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {MENU_CARDS.map((card) => {
+            const count = card.key === "trucks" ? pendingCounts.trucks : card.key === "merchants" ? pendingCounts.merchants : null;
+            return (
+              <button
+                key={card.key}
+                onClick={() => (card.key === "logout" ? handleLogout() : setSection(card.key))}
+                className={`${TONE_BG[card.tone]} rounded-2xl p-5 text-left shadow-sm hover:shadow-md transition-shadow flex flex-col items-start gap-3`}
+              >
+                <span className="icon-tile w-14 h-14" style={{ "--tile-from": card.danger ? "#f87171" : "#fb923c", "--tile-to": card.danger ? "#b91c1c" : "#c2410c" }}>
+                  <card.icon className="w-7 h-7 text-white" />
+                </span>
+                <div>
+                  <p className={`font-bold ${card.danger ? "text-red-600" : "text-brand-navy"} leading-snug`}>
+                    {card.title}
+                    {card.showCount && ` (${count ?? 0})`}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5" dir="rtl">{card.urdu}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
-      </div>
+      )}
+
+      {section === "trucks" && <TrucksDriversManager onStatusChange={refreshPendingCounts} />}
+      {section === "merchants" && <MerchantsManager onStatusChange={refreshPendingCounts} />}
+      {section === "home_content" && <HomeContentHub />}
+      {section === "commodity" && <CommodityManager />}
+      {section === "quantity_units" && <QuantityUnitsManager />}
+      {section === "truck_types" && <VehicleTypesManager />}
+      {section === "messages" && <ChatHub userId={user.id} role="admin" />}
+      {section === "expiry_alerts" && <ExpiryAlerts />}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ACCOUNT-STATUS WORKFLOW — shared by Trucks/Drivers and Merchants Management
+// ---------------------------------------------------------------------------
+const STATUS_TABS = [
+  { key: "all", label: "All" },
+  { key: "new", label: "New Requests" },
+  { key: "under_verification", label: "Under Verification" },
+  { key: "active", label: "Active" },
+  { key: "unbilled", label: "Unbilled" },
+  { key: "banned", label: "Banned/Rejected" },
+];
+
+const STATUS_BADGE = {
+  new: "bg-sky-100 text-sky-700",
+  under_verification: "bg-amber-100 text-amber-700",
+  active: "bg-green-100 text-green-700",
+  unbilled: "bg-purple-100 text-purple-700",
+  banned: "bg-red-100 text-red-700",
+};
+
+function StatusFilterTabs({ active, onChange }) {
+  return (
+    <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+      {STATUS_TABS.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          className={`px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
+            active === t.key ? "bg-brand-orange text-white" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StatusActionSelect({ value, onChange }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`text-xs font-semibold rounded-full px-3 py-1.5 border-0 ${STATUS_BADGE[value] ?? "bg-slate-100 text-slate-600"}`}
+    >
+      {STATUS_TABS.filter((t) => t.key !== "all").map((t) => (
+        <option key={t.key} value={t.key}>{t.label}</option>
+      ))}
+    </select>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TRUCKS / DRIVERS MANAGEMENT
+// ---------------------------------------------------------------------------
+function TrucksDriversManager({ onStatusChange }) {
+  const [filter, setFilter] = useState("all");
+  const [vehicles, setVehicles] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    setLoading(true);
+    let query = supabase.from("vehicles").select("*").order("created_at", { ascending: false });
+    if (filter !== "all") query = query.eq("account_status", filter);
+    const { data } = await query;
+    setVehicles(data ?? []);
+    setLoading(false);
+  }
+  useEffect(() => { refresh(); }, [filter]);
+
+  async function updateStatus(vehicleId, newStatus) {
+    await supabase.from("vehicles").update({ account_status: newStatus }).eq("id", vehicleId);
+    refresh();
+    onStatusChange?.();
+  }
+
+  return (
+    <div>
+      <StatusFilterTabs active={filter} onChange={setFilter} />
+      {loading && <p className="text-slate-400 text-sm">Loading…</p>}
+      {!loading && vehicles.length === 0 && <p className="text-slate-400 text-sm">No trucks/drivers in this category.</p>}
+      <div className="space-y-3">
+        {vehicles.map((v) => (
+          <div key={v.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
+                <TruckIcon className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold text-brand-navy truncate">{v.driver_name} — {v.vehicle_no}</p>
+                <p className="text-xs text-slate-500 truncate">
+                  {v.vehicle_type || "—"}{v.truck_model ? ` · ${v.truck_model}` : ""} · {v.mobile_no}
+                </p>
+              </div>
+            </div>
+            <StatusActionSelect value={v.account_status || "new"} onChange={(val) => updateStatus(v.id, val)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MERCHANTS MANAGEMENT
+// ---------------------------------------------------------------------------
+function MerchantsManager({ onStatusChange }) {
+  const [filter, setFilter] = useState("all");
+  const [merchants, setMerchants] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    setLoading(true);
+    let query = supabase.from("profiles").select("*").eq("role", "merchant").order("created_at", { ascending: false });
+    if (filter !== "all") query = query.eq("account_status", filter);
+    const { data } = await query;
+    setMerchants(data ?? []);
+    setLoading(false);
+  }
+  useEffect(() => { refresh(); }, [filter]);
+
+  async function updateStatus(profileId, newStatus) {
+    await supabase.from("profiles").update({ account_status: newStatus }).eq("id", profileId);
+    refresh();
+    onStatusChange?.();
+  }
+
+  return (
+    <div>
+      <StatusFilterTabs active={filter} onChange={setFilter} />
+      {loading && <p className="text-slate-400 text-sm">Loading…</p>}
+      {!loading && merchants.length === 0 && <p className="text-slate-400 text-sm">No merchants in this category.</p>}
+      <div className="space-y-3">
+        {merchants.map((m) => (
+          <div key={m.id} className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="icon-badge bg-brand-orange/10 text-brand-orange w-11 h-11 rounded-xl shrink-0">
+                <BuildingIcon className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold text-brand-navy truncate">{m.company_name || m.full_name}</p>
+                <p className="text-xs text-slate-500 truncate">
+                  {m.full_name} · {m.phone || "—"} · {m.business_city || "—"}
+                </p>
+              </div>
+            </div>
+            <StatusActionSelect value={m.account_status || "new"} onChange={(val) => updateStatus(m.id, val)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HOME CONTENT HUB — groups Contact Details / Social Media / Our Services /
+// How It Works under one card, plus the existing Hero & Branding manager
+// (heading, logo, slides) so that functionality isn't lost in the reshuffle.
+// ---------------------------------------------------------------------------
+const HOME_CONTENT_SUBTABS = [
+  { key: "hero", label: "Hero & Branding" },
+  { key: "contact", label: "Contact Details" },
+  { key: "social", label: "Social Media Links" },
+  { key: "services", label: "Our Services" },
+  { key: "how_it_works", label: "How It Works" },
+];
+
+function HomeContentHub() {
+  const [subTab, setSubTab] = useState("hero");
+  return (
+    <div>
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        {HOME_CONTENT_SUBTABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setSubTab(t.key)}
+            className={`px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
+              subTab === t.key ? "bg-brand-orange text-white" : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {subTab === "hero" && <HomeContentManager />}
+      {(subTab === "contact" || subTab === "social") && <ContactManager />}
+      {subTab === "services" && <ServicesManager />}
+      {subTab === "how_it_works" && <StepsManager />}
+    </div>
   );
 }
 

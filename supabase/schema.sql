@@ -19,6 +19,7 @@ create table if not exists public.profiles (
   business_city       text,                 -- Business City / Location
   ntn_number          text,                 -- Business / NTN Number
   warehouse_address   text,                 -- Address / Warehouse Location
+  account_status      text not null default 'new' check (account_status in ('new', 'under_verification', 'active', 'unbilled', 'banned')),
   created_at          timestamptz default now()
 );
 
@@ -154,6 +155,7 @@ create table if not exists public.vehicles (
   permit_expiry       date not null,
   permit_image_url    text,
   status              text default 'active' check (status in ('active', 'suspended')),
+  account_status      text not null default 'new' check (account_status in ('new', 'under_verification', 'active', 'unbilled', 'banned')),
   -- Driver Portal: on-duty mode + live GPS position (see Admin/Driver docs)
   status_mode         text not null default 'resting' check (status_mode in ('working', 'resting', 'searching')),
   current_lat         numeric,
@@ -284,6 +286,9 @@ create policy "profiles_select_own_or_admin" on public.profiles
   for select using (id = auth.uid() or public.is_admin());
 create policy "profiles_update_own" on public.profiles
   for update using (id = auth.uid());
+
+create policy "profiles_admin_write" on public.profiles
+  for update using (public.is_admin());
 
 -- Public content (site_content, services, steps): readable by everyone,
 -- writable only by admins

@@ -60,6 +60,16 @@ export default function LoginClient() {
       .catch(() => {});
   }, []);
 
+  function handleBack() {
+    setError("");
+    setInfo("");
+    if (mode === "signup" || mode === "forgot") {
+      setMode("login");
+    } else {
+      router.back();
+    }
+  }
+
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
@@ -156,30 +166,35 @@ export default function LoginClient() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="fixed inset-0 bg-white flex flex-col">
       <PwaSetup />
 
-      {/* App-style top bar: Home + back-to-login (when on Forgot Password) */}
-      <div className="flex items-center justify-between px-4 pt-4">
+      {/* Always-visible top bar — Home + Back never scroll away, and use the
+          same "semi-realistic 3D" icon-tile style as the dashboards, since
+          drivers/merchants often can't read well and rely on recognisable
+          icons rather than text. */}
+      <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-2">
         <Link
           href="/"
-          className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-brand-navy"
+          className="icon-tile w-11 h-11"
+          style={{ "--tile-from": "#38bdf8", "--tile-to": "#0369a1" }}
           aria-label="Go to Home"
         >
-          <HomeIcon className="w-5 h-5" />
+          <HomeIcon className="w-5 h-5 text-white" />
         </Link>
-        {mode === "forgot" && (
-          <button
-            onClick={() => { setMode("login"); setError(""); setInfo(""); }}
-            className="flex items-center gap-1.5 text-sm font-semibold text-slate-500"
-          >
-            <ArrowLeftIcon className="w-4 h-4" /> Back to Login
-          </button>
-        )}
+        <button
+          onClick={handleBack}
+          className="icon-tile w-11 h-11"
+          style={{ "--tile-from": "#94a3b8", "--tile-to": "#475569" }}
+          aria-label="Go Back"
+        >
+          <ArrowLeftIcon className="w-5 h-5 text-white" />
+        </button>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-5 py-6">
-        <div className="w-full max-w-sm">
+      {/* Only this area scrolls — the header above never moves */}
+      <div className="flex-1 overflow-y-auto px-5 pb-6">
+        <div className="w-full max-w-sm mx-auto">
           <div className="text-center mb-8">
             {logoUrl ? (
               <img src={logoUrl} alt="Smart Goods Transport Company" className="w-16 h-16 rounded-full object-cover mx-auto mb-3 border border-slate-100" />

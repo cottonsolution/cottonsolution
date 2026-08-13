@@ -44,15 +44,20 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <div className="px-4 pt-4">
-        <Link href="/" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-brand-navy" aria-label="Go to Home">
-          <HomeIcon className="w-5 h-5" />
+    <div className="fixed inset-0 bg-white flex flex-col">
+      <div className="shrink-0 px-4 pt-4 pb-2">
+        <Link
+          href="/"
+          className="icon-tile w-11 h-11"
+          style={{ "--tile-from": "#38bdf8", "--tile-to": "#0369a1" }}
+          aria-label="Go to Home"
+        >
+          <HomeIcon className="w-5 h-5 text-white" />
         </Link>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-5 py-6">
-        <div className="w-full max-w-sm">
+      <div className="flex-1 overflow-y-auto px-5 pb-6">
+        <div className="w-full max-w-sm mx-auto">
           <div className="text-center mb-8">
             <span className="icon-badge bg-brand-orange/10 text-brand-orange mx-auto mb-3">
               <LockIcon className="w-7 h-7" />

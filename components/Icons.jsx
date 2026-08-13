@@ -517,6 +517,17 @@ export function EyeIcon({ className }) {
   );
 }
 
+export function EyeOffIcon({ className }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M3 3l18 18" />
+      <path d="M10.6 5.2A10.9 10.9 0 0 1 12 5c6.75 0 10.5 7 10.5 7a13.5 13.5 0 0 1-3.1 3.9" />
+      <path d="M6.6 6.6C3.4 8.5 1.5 12 1.5 12s3.75 7 10.5 7c1.5 0 2.85-.35 4-.9" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  );
+}
+
 export function FacebookIcon({ className }) {
   return (
     <svg className={className} {...base}>
